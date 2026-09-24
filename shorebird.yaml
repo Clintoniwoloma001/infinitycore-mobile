@@ -1,0 +1,4 @@
+# Shorebird OTA configuration.
+# app_id is generated when running `shorebird init` against the project's
+# Shorebird app; the updater no-ops until a valid app_id is set.
+app_id: 00000000-0000-0000-0000-000000000000

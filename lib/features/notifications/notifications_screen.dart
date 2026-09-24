@@ -1,0 +1,218 @@
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../core/services/supabase_service.dart';
+import '../../core/theme/app_theme.dart';
+import '../../shared/models/models.dart';
+import '../../shared/utils/formatters.dart';
+import '../../shared/widgets/common.dart';
+import '../dashboard/home_shell.dart';
+
+class NotificationsScreen extends StatefulWidget {
+  const NotificationsScreen({super.key});
+
+  @override
+  State<NotificationsScreen> createState() => _NotificationsScreenState();
+}
+
+class _NotificationsScreenState extends State<NotificationsScreen> {
+  List<AppNotification> _items = [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final user = SupabaseService.client.auth.currentUser;
+      if (user == null) {
+        setState(() {
+          _items = [];
+          _loading = false;
+        });
+        return;
+      }
+      final res = await SupabaseService.client
+          .from('notifications')
+          .select('id, title, message, link, read, type, created_at')
+          .eq('user_id', user.id)
+          .order('created_at', ascending: false)
+          .limit(100);
+      if (!mounted) return;
+      setState(
+        () => _items = (res as List<dynamic>? ?? [])
+            .map(AppNotification.fromJson)
+            .toList(),
+      );
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _open(AppNotification n) async {
+    if (!n.read) {
+      await SupabaseService.client
+          .from('notifications')
+          .update({'read': true})
+          .eq('id', n.id);
+      if (!mounted) return;
+      _load();
+    }
+    final link = n.link;
+    if (link.isNotEmpty && link.startsWith('/')) {
+      if (!mounted) return;
+      if (link.contains('#/')) {
+        final path = link.split('#/').last.split('?').first;
+        context.go('/$path');
+      } else {
+        context.go(link);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: shellAppBar(context, title: 'Notifications'),
+      body: _loading
+          ? const PageLoadingView(label: 'Loading notifications…')
+          : _error != null && _items.isEmpty
+          ? PageErrorView(message: _error!, onRetry: _load)
+          : _items.isEmpty
+          ? const PageEmptyView(
+              title: 'No notifications',
+              description: 'New alerts and announcements will appear here.',
+            )
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: ListView.separated(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(16),
+                itemCount: _items.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 10),
+                itemBuilder: (context, i) {
+                  final n = _items[i];
+                  return _NotificationTile(
+                    notification: n,
+                    onTap: () => _open(n),
+                  );
+                },
+              ),
+            ),
+    );
+  }
+}
+
+class _NotificationTile extends StatelessWidget {
+  const _NotificationTile({required this.notification, required this.onTap});
+
+  final AppNotification notification;
+  final VoidCallback onTap;
+
+  IconData get _icon {
+    switch (notification.type) {
+      case 'attendance':
+        return Icons.schedule;
+      case 'leave':
+        return Icons.event_note;
+      case 'message':
+        return Icons.chat_bubble_outline;
+      case 'payroll':
+        return Icons.payments_outlined;
+      default:
+        return Icons.notifications_active_outlined;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: notification.read ? Colors.white : const Color(0xFFF0FDF4),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color:
+                      (notification.read
+                              ? const Color(0xFFE2E8F0)
+                              : AppColors.green)
+                          .withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  _icon,
+                  size: 18,
+                  color: notification.read
+                      ? const Color(0xFF64748B)
+                      : AppColors.green,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      notification.title,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: notification.read
+                            ? Colors.black54
+                            : Colors.black,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      notification.message,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.black54,
+                      ),
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (notification.createdAt.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        Fmt.dateTimeShort(notification.createdAt),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Colors.black38,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (!notification.read)
+                const Padding(
+                  padding: EdgeInsets.only(top: 4),
+                  child: Icon(Icons.circle, size: 8, color: AppColors.green),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
