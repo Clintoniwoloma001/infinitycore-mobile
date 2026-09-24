@@ -378,6 +378,9 @@ class AuthService extends ChangeNotifier implements AuthGateState {
     _status = AuthStatus.unauthenticated;
     notifyListeners();
 
+    // NOTE: the device binding is NOT released here. The device stays bound
+    // to this account across sign-outs so a different account cannot be
+    // signed in on it; only HR/Super Admin can unbind (server-enforced).
     await MobileSessionService.instance.revoke();
     await SupabaseService.client.auth.signOut();
     _session = null;

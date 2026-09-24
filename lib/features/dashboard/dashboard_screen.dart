@@ -357,7 +357,7 @@ class _TodayCard extends StatelessWidget {
                             ? 'Your attendance for today'
                             : 'In at ${Fmt.clock(today!.clockIn)}'
                                   '${today.clockOut != null ? ' · Out at ${Fmt.clock(today.clockOut)}' : ''}'
-                                  '${lateMinutes > 0 ? ' · ${lateMinutes}m late' : ''}',
+                                  '${lateMinutes > 0 ? ' · ${Fmt.lateDuration(lateMinutes)} late' : ''}',
                         style: TextStyle(
                           fontSize: 12,
                           color: AppColors.textSecondary(context),

@@ -69,6 +69,17 @@ class Fmt {
         .map((p) => p.substring(0, 1).toUpperCase() + p.substring(1))
         .join(' ');
   }
+
+  /// Format a late-arrival duration in minutes.
+  ///
+  /// Durations of an hour or more render as hours + minutes ("5h 38m");
+  /// shorter ones stay in minutes ("45m"). Negative values (e.g. a `-338`
+  /// from a reversed server diff) are normalized with [int.abs].
+  static String lateDuration(int minutes) {
+    final m = minutes.abs();
+    if (m >= 60) return '${m ~/ 60}h ${m % 60}m';
+    return '${m}m';
+  }
 }
 
 /// Haversine distance in metres — same formula as the web geofence service.

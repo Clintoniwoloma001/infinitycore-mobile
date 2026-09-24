@@ -4,6 +4,7 @@ import '../../core/services/auth_service.dart';
 import '../../core/services/biometrics.dart';
 import '../../core/services/mobile_session_service.dart';
 import '../../core/services/notification_service.dart';
+import '../../core/security/location_integrity.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/models/models.dart';
 import '../../shared/utils/formatters.dart';
@@ -475,7 +476,7 @@ class _ClockCard extends StatelessWidget {
                   if (lateMinutes > 0) ...[
                     const SizedBox(width: 8),
                     Text(
-                      '· ${lateMinutes}m late',
+                      '· ${Fmt.lateDuration(lateMinutes)} late',
                       style: const TextStyle(
                         fontSize: 12,
                         color: AppColors.amber,
@@ -875,6 +876,8 @@ class _LocationBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final emulatorDefault = LocationIntegrity.instance
+        .looksLikeEmulatorDefault(position.lat, position.lng);
     return Card(
       margin: EdgeInsets.zero,
       color: AppColors.isDark(context)
@@ -892,14 +895,24 @@ class _LocationBanner extends StatelessWidget {
         padding: const EdgeInsets.all(12),
         child: Row(
           children: [
-            const Icon(Icons.gps_fixed, size: 16, color: AppColors.blue),
+            Icon(
+              emulatorDefault ? Icons.gps_off : Icons.gps_fixed,
+              size: 16,
+              color: emulatorDefault ? AppColors.amber : AppColors.blue,
+            ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 'Current fix: ${position.lat.toStringAsFixed(6)}, '
                 '${position.lng.toStringAsFixed(6)} '
-                '(±${position.accuracy.toStringAsFixed(1)}m). The server '
-                'treats this as authoritative attendance evidence.',
+                '(±${position.accuracy.toStringAsFixed(1)}m). '
+                '${emulatorDefault
+                    ? 'This is the Android emulator\u2019s default Googleplex '
+                        'location, not a real GPS fix. Set the device location '
+                        '(emulator \u22EE \u2192 Location) or use a physical '
+                        'device before clocking in.'
+                    : 'The server treats this as authoritative attendance '
+                        'evidence.'}',
                 style: TextStyle(
                   fontSize: 12,
                   color: AppColors.textPrimary(context),

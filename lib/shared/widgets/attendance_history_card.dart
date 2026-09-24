@@ -138,7 +138,7 @@ class _AttendanceHistoryCardState extends State<AttendanceHistoryCard> {
           if (present) ...[
             Text(
               '${WorkedHours.fromRecord(r).format()}'
-              '${r.lateMinutes > 0 ? ' · ${r.lateMinutes}m late' : ''}',
+              '${r.lateMinutes > 0 ? ' · ${Fmt.lateDuration(r.lateMinutes)} late' : ''}',
               style: TextStyle(
                 fontSize: 12,
                 color: r.lateMinutes > 0 ? AppColors.amber : secondary,

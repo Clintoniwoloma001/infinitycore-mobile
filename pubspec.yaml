@@ -1,5 +1,5 @@
 name: infinitycore
-description: "InfinityCore Mobile — Infinity Bank enterprise companion app."
+description: "InfinityCore Mobile — Infinity Microfinance Bank enterprise companion app."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -80,6 +80,7 @@ flutter:
     - .env
     - assets/icons/
     - assets/images/
+    - shorebird.yaml
 
   # To add assets to your application, add an assets section, like this:
   # assets:

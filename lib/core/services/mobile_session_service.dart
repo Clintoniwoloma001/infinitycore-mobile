@@ -195,16 +195,16 @@ class MobileSessionService extends ChangeNotifier {
     return false;
   }
 
-  /// Softly revoke the session (used on explicit sign-out). Best effort.
+  /// Clear local session state on sign-out.
+  ///
+  /// The server-side device binding is INTENTIONALLY left in place: this
+  /// device stays bound to the account across sign-outs, so nobody can sign
+  /// a *different* account in on this phone just because the owner signed
+  /// out. The only release path is an HR/Super Admin unbind
+  /// (`mobile_admin_revoke_device`); the server additionally ignores
+  /// client-initiated `mobile_device_revoke` releases (see migration
+  /// phase 07 — persistent device binding).
   Future<void> revoke() async {
-    try {
-      final deviceId =
-          _deviceId ?? await DeviceIdentity.instance.ensureDeviceId();
-      await SupabaseService.client.rpc<Map<String, dynamic>>(
-        'mobile_device_revoke',
-        params: {'p_device_id': deviceId},
-      );
-    } catch (_) {}
     _initialized = false;
     _inFlight = null;
     _sessionId = null;

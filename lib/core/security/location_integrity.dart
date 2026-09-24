@@ -44,6 +44,20 @@ class LocationIntegrity {
     return mock ? 'mock_detected' : 'no_mock_detected';
   }
 
+  /// The Android emulator ships with a default GPS fix at Google's Mountain
+  /// View campus (37.4219983, -122.084). A fix at exactly those coordinates
+  /// almost always means "emulator with no real location configured", never
+  /// an actual attendance position — surface it instead of silently
+  /// accepting obviously-wrong evidence.
+  static const double emulatorDefaultLat = 37.4219983;
+  static const double emulatorDefaultLng = -122.084;
+
+  /// True when [lat]/[lng] match the Android emulator's default Googleplex
+  /// fix (within ~11 m).
+  bool looksLikeEmulatorDefault(double lat, double lng) =>
+      (lat - emulatorDefaultLat).abs() < 0.0001 &&
+      (lng - emulatorDefaultLng).abs() < 0.0001;
+
   Future<bool> serviceEnabled() => Geolocator.isLocationServiceEnabled();
 
   Future<LocationPermission> permissionState() => Geolocator.checkPermission();

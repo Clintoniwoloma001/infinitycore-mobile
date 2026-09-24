@@ -385,7 +385,7 @@ class _AttendanceManagementScreenState
         'In ${Fmt.clock(r.clockIn)}'
             '${r.clockOut != null ? ' · Out ${Fmt.clock(r.clockOut)}' : ''}',
       if (r.workHours > 0) '${workedHoursFor(r).format()} worked',
-      if (r.lateMinutes > 0) '${r.lateMinutes}m late',
+      if (r.lateMinutes > 0) '${Fmt.lateDuration(r.lateMinutes)} late',
     ];
 
     return Card(

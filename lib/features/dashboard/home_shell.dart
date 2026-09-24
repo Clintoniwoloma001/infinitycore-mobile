@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/diagnostics/auth_trace.dart';
 import '../../core/services/auth_service.dart';
@@ -100,7 +101,11 @@ class _HomeShellState extends State<HomeShell> {
     final tabs = _tabs;
     final index = _index.clamp(0, tabs.length - 1);
     return Scaffold(
-      appBar: shellAppBar(context, title: tabs[index].label),
+      appBar: shellAppBar(
+        context,
+        title: tabs[index].label,
+        showBackButton: false,
+      ),
       body: IndexedStack(
         index: index,
         children: [for (final t in tabs) t.screen],
@@ -127,13 +132,33 @@ class _HomeShellState extends State<HomeShell> {
 }
 
 /// Standard shell app bar: title, brand underline accent, optional actions.
+///
+/// Every non-tab screen gets a leading back control. Detail screens are often
+/// opened with `context.go(...)` (which replaces the stack instead of pushing
+/// onto it), so when there is nothing to pop we fall back to `/home` — the
+/// button always takes the user somewhere sensible.
 AppBar shellAppBar(
   BuildContext context, {
   required String title,
   Widget? bottom,
   List<Widget>? actionsExtra,
+  bool showBackButton = true,
 }) {
   return AppBar(
+    automaticallyImplyLeading: false,
+    leading: showBackButton
+        ? IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new, size: 20),
+            tooltip: 'Back',
+            onPressed: () {
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                context.go('/home');
+              }
+            },
+          )
+        : null,
     title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
     centerTitle: false,
     bottom: bottom == null

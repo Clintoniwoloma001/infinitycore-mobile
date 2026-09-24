@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
 import '../../features/attendance/attendance_service.dart';
 import '../config/env.dart';
+import '../diagnostics/auth_trace.dart';
 import 'notification_service.dart';
 import 'supabase_service.dart';
 
@@ -65,8 +67,19 @@ class ReminderService {
         clockedInToday: clockedInToday,
         clockedOutToday: clockedOutToday,
       );
-    } catch (_) {
-      // A failed reminder sync must never break app startup or login.
+      AuthTrace.log(
+        'reminder.sync',
+        'scheduled: clockIn=${settings.clockInTime} '
+            'clockOut=${settings.clockOutTime} enabled=${settings.enabled} '
+            'clockedInToday=$clockedInToday clockedOutToday=$clockedOutToday '
+            'tz=${req.appTimezone}',
+      );
+    } catch (e, st) {
+      // A failed reminder sync must never break app startup or login — but it
+      // must not be silent either, otherwise a broken reminder system looks
+      // identical to a working one from the outside.
+      AuthTrace.log('reminder.sync', 'FAILED: $e\n$st');
+      debugPrint('ReminderService.sync failed: $e');
     }
   }
 }
