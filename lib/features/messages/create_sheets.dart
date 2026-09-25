@@ -811,7 +811,7 @@ class _ConversationInfoSheetState extends State<_ConversationInfoSheet> {
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
               child: OutlinedButton.icon(
                 onPressed: _shareInvite,
-                icon: const Icon(Icons.share_outlined, size: 18),
+                icon: const Icon(Icons.mail_outline, size: 18),
                 label: const Text('Share invite'),
               ),
             ),
@@ -831,7 +831,7 @@ class _ConversationInfoSheetState extends State<_ConversationInfoSheet> {
                   ),
                   TextButton.icon(
                     onPressed: _addMember,
-                    icon: const Icon(Icons.person_add_alt, size: 18),
+                    icon: const Icon(Icons.person, size: 18),
                     label: const Text('Add'),
                   ),
                 ],
@@ -886,7 +886,7 @@ class _ConversationInfoSheetState extends State<_ConversationInfoSheet> {
                                   tooltip: 'Remove',
                                   onPressed: () => _removeMember(memberId),
                                   icon: const Icon(
-                                    Icons.person_remove_outlined,
+                                    Icons.cancel,
                                     size: 20,
                                     color: AppColors.rose,
                                   ),

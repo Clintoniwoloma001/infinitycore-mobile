@@ -282,7 +282,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
           IconButton(
             tooltip: 'Share invite',
             onPressed: _shareInvite,
-            icon: const Icon(Icons.share_outlined, color: AppColors.green),
+            icon: const Icon(Icons.mail_outline, color: AppColors.green),
           ),
           IconButton(
             tooltip: 'Info & members',
@@ -389,7 +389,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.share_outlined),
+              leading: const Icon(Icons.mail_outline),
               title: const Text('Copy message'),
               onTap: () {
                 Navigator.of(sheet).pop();
@@ -576,7 +576,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
               backgroundColor: AppColors.green,
               disabledBackgroundColor: AppColors.green.withValues(alpha: 0.4),
             ),
-            icon: const Icon(Icons.send, color: Colors.white),
+            icon: const Icon(Icons.arrow_right, color: Colors.white),
           ),
         ],
       ),

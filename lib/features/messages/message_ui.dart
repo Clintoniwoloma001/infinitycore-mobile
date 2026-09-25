@@ -142,7 +142,7 @@ Future<void> showEmployeeProfileSheet(
                         Navigator.of(context).pop();
                         onMessage(userId);
                       },
-                      icon: const Icon(Icons.chat_bubble_outline, size: 18),
+                      icon: const Icon(Icons.inbox_outlined, size: 18),
                       label: const Text('Message'),
                     ),
                   ),
@@ -199,10 +199,10 @@ class _MessageAttachmentTileState extends State<MessageAttachmentTile> {
   IconData get _icon {
     final type = '${widget.attachment['file_type'] ?? ''}'.toLowerCase();
     if (type == 'application/pdf' || _name.toLowerCase().endsWith('.pdf')) {
-      return Icons.insert_drive_file_outlined;
+      return Icons.link;
     }
     if (type.startsWith('image/')) return Icons.camera_alt;
-    return Icons.insert_drive_file_outlined;
+    return Icons.link;
   }
 
   Future<void> _open() async {
@@ -399,7 +399,7 @@ class MessageBubble extends StatelessWidget {
                             Icon(
                               official
                                   ? Icons.verified_outlined
-                                  : Icons.warning_amber,
+                                  : Icons.warning_amber_rounded,
                               size: 12,
                               color: isMine ? Colors.white70 : AppColors.amber,
                             ),

@@ -402,7 +402,7 @@ class _ChatScreenState extends State<ChatScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.share_outlined),
+              leading: const Icon(Icons.mail_outline),
               title: const Text('Copy message'),
               onTap: () {
                 Navigator.of(sheet).pop();
@@ -662,7 +662,7 @@ class _ChatScreenState extends State<ChatScreen> {
               disabledBackgroundColor: AppColors.accent(context)
                   .withValues(alpha: 0.4),
             ),
-            icon: const Icon(Icons.send, color: Colors.white, size: 20),
+            icon: const Icon(Icons.arrow_right, color: Colors.white, size: 20),
           ),
         ],
       ),

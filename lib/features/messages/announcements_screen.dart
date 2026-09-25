@@ -64,7 +64,7 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
               onPressed: _openComposer,
               backgroundColor: AppColors.accent(context),
               foregroundColor: Colors.white,
-              icon: const Icon(Icons.campaign_outlined),
+              icon: const Icon(Icons.notifications_active_outlined),
               label: const Text('New'),
             )
           : null,

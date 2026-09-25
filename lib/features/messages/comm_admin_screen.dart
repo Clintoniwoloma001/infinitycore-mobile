@@ -203,7 +203,7 @@ class _OverviewTab extends StatelessWidget {
             const SizedBox(height: 20),
             OutlinedButton.icon(
               onPressed: () => showAnnouncementComposer(context),
-              icon: const Icon(Icons.campaign_outlined),
+              icon: const Icon(Icons.notifications_active_outlined),
               label: const Text('Publish an announcement'),
             ),
           ],
@@ -754,7 +754,7 @@ class _ExportsTabState extends State<_ExportsTab> {
         const SizedBox(height: 14),
         FilledButton.icon(
           onPressed: _busy ? null : _run,
-          icon: const Icon(Icons.share_outlined, size: 18),
+          icon: const Icon(Icons.mail_outline, size: 18),
           label: const Text('Generate export'),
         ),
         if (_busy) ...[

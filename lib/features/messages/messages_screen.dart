@@ -118,7 +118,7 @@ class _MessagesScreenState extends State<MessagesScreen>
         actionsExtra: [
           IconButton(
             tooltip: 'Announcements',
-            icon: const Icon(Icons.campaign_outlined),
+            icon: const Icon(Icons.notifications_active_outlined),
             onPressed: () async {
               await context.push('/messages/announcements');
               if (mounted) await _load();
@@ -337,7 +337,7 @@ class _ThreadList extends StatelessWidget {
               foregroundColor: Colors.white,
               heroTag: 'new_chat',
               onPressed: onNewChat,
-              child: const Icon(Icons.add_comment_outlined),
+              child: const Icon(Icons.edit),
             ),
           ),
         ],
@@ -449,7 +449,7 @@ class _ThreadList extends StatelessWidget {
             foregroundColor: Colors.white,
             heroTag: 'new_chat',
             onPressed: onNewChat,
-            child: const Icon(Icons.add_comment_outlined),
+            child: const Icon(Icons.edit),
           ),
         ),
       ],
@@ -507,7 +507,7 @@ class _ChannelList extends StatelessWidget {
                       unread,
                     );
                     return _ConversationTile(
-                      icon: Icons.campaign_outlined,
+                      icon: Icons.notifications_active_outlined,
                       iconColor: AppColors.blue,
                       title: name,
                       subtitle: '${c['description'] ?? ''}',
@@ -533,7 +533,7 @@ class _ChannelList extends StatelessWidget {
             foregroundColor: Colors.white,
             heroTag: 'new_channel',
             onPressed: onCreate,
-            child: const Icon(Icons.add),
+            child: const Icon(Icons.edit),
           ),
         ),
       ],
@@ -590,7 +590,7 @@ class _GroupList extends StatelessWidget {
                       unread,
                     );
                     return _ConversationTile(
-                      icon: Icons.groups_2_outlined,
+                      icon: Icons.groups,
                       iconColor: AppColors.violet,
                       title: '${g['name'] ?? 'Group'}',
                       subtitle: count == 0
@@ -613,7 +613,7 @@ class _GroupList extends StatelessWidget {
             foregroundColor: Colors.white,
             heroTag: 'new_group',
             onPressed: onCreate,
-            child: const Icon(Icons.add),
+            child: const Icon(Icons.edit),
           ),
         ),
       ],
