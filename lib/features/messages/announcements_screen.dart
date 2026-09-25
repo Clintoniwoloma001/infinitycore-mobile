@@ -230,7 +230,7 @@ class _AnnouncementCard extends StatelessWidget {
               if (requiresAck)
                 TextButton.icon(
                   onPressed: onAcknowledge,
-                  icon: const Icon(Icons.done_all, size: 16),
+                  icon: const Icon(Icons.check, size: 16),
                   label: const Text('Acknowledge'),
                 ),
             ],

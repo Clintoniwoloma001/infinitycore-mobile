@@ -127,7 +127,7 @@ class _MessagesScreenState extends State<MessagesScreen>
           if (canAdmin)
             IconButton(
               tooltip: 'Comm Admin',
-              icon: const Icon(Icons.admin_panel_settings_outlined),
+              icon: const Icon(Icons.shield),
               onPressed: () => context.push('/comm-admin'),
             ),
         ],

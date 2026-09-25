@@ -402,7 +402,7 @@ class _ChatScreenState extends State<ChatScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.copy),
+              leading: const Icon(Icons.share_outlined),
               title: const Text('Copy message'),
               onTap: () {
                 Navigator.of(sheet).pop();
@@ -410,7 +410,7 @@ class _ChatScreenState extends State<ChatScreen> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.emoji_emotions_outlined),
+              leading: const Icon(Icons.face_outlined),
               title: const Text('React'),
               onTap: () {
                 Navigator.of(sheet).pop();
@@ -418,7 +418,7 @@ class _ChatScreenState extends State<ChatScreen> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.bookmark_border),
+              leading: const Icon(Icons.inbox_outlined),
               title: const Text('Bookmark'),
               onTap: () {
                 Navigator.of(sheet).pop();
@@ -430,7 +430,9 @@ class _ChatScreenState extends State<ChatScreen> {
               },
             ),
             ListTile(
-              leading: Icon(pinned ? Icons.push_pin : Icons.push_pin_outlined),
+              leading: Icon(
+                pinned ? Icons.check_circle : Icons.check_circle_outline,
+              ),
               title: Text(pinned ? 'Unpin message' : 'Pin message'),
               onTap: () {
                 Navigator.of(sheet).pop();
@@ -453,7 +455,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.delete_outline),
+                leading: const Icon(Icons.cancel),
                 title: const Text('Delete'),
                 onTap: () {
                   Navigator.of(sheet).pop();
@@ -462,7 +464,7 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ],
             ListTile(
-              leading: const Icon(Icons.flag_outlined),
+              leading: const Icon(Icons.warning_amber_rounded),
               title: const Text('Report'),
               onTap: () {
                 Navigator.of(sheet).pop();
@@ -527,7 +529,7 @@ class _ChatScreenState extends State<ChatScreen> {
           if (hasPhone)
             IconButton(
               tooltip: 'Call',
-              icon: const Icon(Icons.call_outlined),
+              icon: const Icon(Icons.phone_android),
               onPressed: () async {
                 final ok = await placePhoneCall('${_other['phone']}');
                 if (!ok && context.mounted) {

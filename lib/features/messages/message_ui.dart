@@ -130,7 +130,7 @@ Future<void> showEmployeeProfileSheet(
                           );
                         }
                       },
-                      icon: const Icon(Icons.call, size: 18),
+                      icon: const Icon(Icons.phone_android, size: 18),
                       label: const Text('Call'),
                     ),
                   ),
@@ -199,9 +199,9 @@ class _MessageAttachmentTileState extends State<MessageAttachmentTile> {
   IconData get _icon {
     final type = '${widget.attachment['file_type'] ?? ''}'.toLowerCase();
     if (type == 'application/pdf' || _name.toLowerCase().endsWith('.pdf')) {
-      return Icons.picture_as_pdf_outlined;
+      return Icons.insert_drive_file_outlined;
     }
-    if (type.startsWith('image/')) return Icons.image_outlined;
+    if (type.startsWith('image/')) return Icons.camera_alt;
     return Icons.insert_drive_file_outlined;
   }
 
@@ -294,11 +294,7 @@ class _MessageAttachmentTileState extends State<MessageAttachmentTile> {
                 ),
               )
             else
-              Icon(
-                Icons.open_in_new,
-                size: 14,
-                color: AppColors.iconMuted(context),
-              ),
+              Icon(Icons.link, size: 14, color: AppColors.iconMuted(context)),
           ],
         ),
       ),
@@ -403,7 +399,7 @@ class MessageBubble extends StatelessWidget {
                             Icon(
                               official
                                   ? Icons.verified_outlined
-                                  : Icons.priority_high,
+                                  : Icons.warning_amber,
                               size: 12,
                               color: isMine ? Colors.white70 : AppColors.amber,
                             ),
@@ -454,7 +450,7 @@ class MessageBubble extends StatelessWidget {
                         if (isMine) ...[
                           const SizedBox(width: 4),
                           Icon(
-                            queued ? Icons.schedule : Icons.done_all,
+                            queued ? Icons.schedule : Icons.check,
                             size: 12,
                             color: Colors.white70,
                           ),
@@ -520,7 +516,7 @@ class _ImagePreviewState extends State<_ImagePreview> {
             width: 180,
             height: 100,
             color: AppColors.border(context),
-            child: const Center(child: Icon(Icons.broken_image_outlined)),
+            child: const Center(child: Icon(Icons.no_photography_outlined)),
           );
         }
         return Image.network(
@@ -534,7 +530,7 @@ class _ImagePreviewState extends State<_ImagePreview> {
             width: 180,
             height: 100,
             color: AppColors.border(context),
-            child: const Center(child: Icon(Icons.broken_image_outlined)),
+            child: const Center(child: Icon(Icons.no_photography_outlined)),
           ),
           loadingBuilder: (context, child, progress) => progress == null
               ? child

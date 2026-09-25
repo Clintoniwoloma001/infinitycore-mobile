@@ -554,7 +554,7 @@ class _AuditTab extends StatelessWidget {
               dense: true,
               contentPadding: EdgeInsets.zero,
               leading: Icon(
-                Icons.history,
+                Icons.event,
                 size: 18,
                 color: AppColors.iconMuted(context),
               ),
@@ -754,7 +754,7 @@ class _ExportsTabState extends State<_ExportsTab> {
         const SizedBox(height: 14),
         FilledButton.icon(
           onPressed: _busy ? null : _run,
-          icon: const Icon(Icons.download, size: 18),
+          icon: const Icon(Icons.share_outlined, size: 18),
           label: const Text('Generate export'),
         ),
         if (_busy) ...[

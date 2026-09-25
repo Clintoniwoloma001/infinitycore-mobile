@@ -389,7 +389,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.copy),
+              leading: const Icon(Icons.share_outlined),
               title: const Text('Copy message'),
               onTap: () {
                 Navigator.of(sheet).pop();
@@ -397,7 +397,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.push_pin_outlined),
+              leading: const Icon(Icons.check_circle_outline),
               title: Text(pinned ? 'Unpin message' : 'Pin message'),
               onTap: () {
                 Navigator.of(sheet).pop();
@@ -419,7 +419,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.delete_outline),
+                leading: const Icon(Icons.cancel),
                 title: const Text('Delete'),
                 onTap: () {
                   Navigator.of(sheet).pop();
@@ -428,7 +428,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
               ),
             ],
             ListTile(
-              leading: const Icon(Icons.flag_outlined),
+              leading: const Icon(Icons.warning_amber_rounded),
               title: const Text('Report'),
               onTap: () {
                 Navigator.of(sheet).pop();

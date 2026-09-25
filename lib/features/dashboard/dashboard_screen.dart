@@ -146,7 +146,7 @@ class _MessagesCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
-                  Icons.forum_outlined,
+                  Icons.chat_bubble_outline,
                   size: 20,
                   color: AppColors.accent(context),
                 ),
