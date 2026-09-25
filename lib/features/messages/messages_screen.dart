@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/routing/app_router.dart';
 import '../../core/security/role_guard.dart';
 import '../../core/services/auth_service.dart';
+import '../../core/services/supabase_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/models/models.dart';
 import '../../shared/utils/formatters.dart';
@@ -40,6 +41,9 @@ class _MessagesScreenState extends State<MessagesScreen>
   List<Map<String, dynamic>> _channels = [];
   List<Map<String, dynamic>> _groups = [];
   Map<String, int> _unread = const {};
+
+  /// Resolved auth user id -> employee name, for the thread tiles.
+  Map<String, Map<String, dynamic>> _directory = const {};
   String _query = '';
   bool _loading = true;
   String? _error;
@@ -75,6 +79,28 @@ class _MessagesScreenState extends State<MessagesScreen>
       if (!mounted) return;
       final channelsDone = await channels;
       final groupsDone = await groups;
+      // `chat_threads` stores only member_a/member_b, so peer names must come
+      // from the directory RPC — never from a raw UUID or a missing column.
+      Map<String, Map<String, dynamic>> directory = const {};
+      final peerIds = <String>{};
+      for (final t in threadsDone) {
+        final peer = t.memberA == SupabaseService.userId
+            ? t.memberB
+            : t.memberA;
+        if (peer.isNotEmpty && peer != SupabaseService.userId) {
+          peerIds.add(peer);
+        }
+      }
+      if (peerIds.isNotEmpty) {
+        try {
+          directory = await CommunicationService.instance.resolveDirectory(
+            peerIds.toList(),
+          );
+        } catch (_) {
+          // Directory resolution is best effort; tiles fall back to 'Colleague'.
+        }
+      }
+      if (!mounted) return;
       // Unread totals are cosmetic; never fail the whole screen over them.
       Map<String, int> unread = const {};
       try {
@@ -85,6 +111,7 @@ class _MessagesScreenState extends State<MessagesScreen>
         _threads = threadsDone;
         _channels = channelsDone;
         _groups = groupsDone;
+        _directory = directory;
         _unread = unread;
       });
     } catch (e) {
@@ -158,6 +185,7 @@ class _MessagesScreenState extends State<MessagesScreen>
                       _ThreadList(
                         threads: _threads,
                         unread: _unread,
+                        directory: _directory,
                         query: _query,
                         onRefresh: _load,
                         onOpenThread: (id) => _openThread(context, id),
@@ -287,6 +315,7 @@ class _ThreadList extends StatelessWidget {
   const _ThreadList({
     required this.threads,
     required this.unread,
+    required this.directory,
     required this.query,
     required this.onRefresh,
     required this.onOpenThread,
@@ -295,10 +324,23 @@ class _ThreadList extends StatelessWidget {
 
   final List<ChatThread> threads;
   final Map<String, int> unread;
+  final Map<String, Map<String, dynamic>> directory;
   final String query;
   final Future<void> Function() onRefresh;
   final ValueChanged<String> onOpenThread;
   final VoidCallback onNewChat;
+
+  /// Display name for a direct thread. `chat_threads` has no `other_name`
+  /// column, so the peer id is derived from the members and resolved through
+  /// the employee directory.
+  String _nameOf(ChatThread t) {
+    final me = SupabaseService.userId ?? '';
+    final peer = t.memberA == me ? t.memberB : t.memberA;
+    final resolved = peer.isEmpty || peer == me
+        ? t.otherName
+        : MessagingService.instance.directoryName(directory, peer);
+    return resolved.trim().isEmpty ? 'Colleague' : resolved;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -310,7 +352,7 @@ class _ThreadList extends StatelessWidget {
         : threads
               .where(
                 (t) =>
-                    t.otherName.toLowerCase().contains(q) ||
+                    _nameOf(t).toLowerCase().contains(q) ||
                     t.lastMessage.toLowerCase().contains(q),
               )
               .toList();
@@ -354,6 +396,7 @@ class _ThreadList extends StatelessWidget {
             separatorBuilder: (_, _) => const SizedBox(height: 8),
             itemBuilder: (context, i) {
               final t = visible[i];
+              final displayName = _nameOf(t);
               final unreadCount = CommunicationService.unreadFor(
                 'direct',
                 t.id,
@@ -369,14 +412,14 @@ class _ThreadList extends StatelessWidget {
                     padding: const EdgeInsets.all(12),
                     child: Row(
                       children: [
-                        AvatarCircle(name: t.otherName, size: 44),
+                        AvatarCircle(name: displayName, size: 44),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                t.otherName,
+                                displayName,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(

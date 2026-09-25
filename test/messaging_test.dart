@@ -3,6 +3,7 @@ import 'package:infinitycore/core/routing/auth_gate.dart';
 import 'package:infinitycore/core/security/role_guard.dart';
 import 'package:infinitycore/features/messages/communication_service.dart';
 import 'package:infinitycore/features/messages/message_ui.dart';
+import 'package:infinitycore/features/messages/messaging_service.dart';
 import 'package:infinitycore/shared/models/models.dart';
 
 /// Minimal auth state so the pure route guard can be exercised directly.
@@ -198,6 +199,55 @@ void main() {
       expect(relativeTime(null), '');
       expect(relativeTime(''), '');
       expect(relativeTime('not-a-date'), '');
+    });
+  });
+
+  group('Employee directory names', () {
+    // Regression: the RPC returns `full_name`/`email`, but the lookup used to
+    // read a `name` key that is never returned, so every resolved colleague
+    // silently fell back to "Colleague" (and the hub showed "00" initials).
+    final rpcRow = <String, dynamic>{
+      'user_id': 'peer-uuid',
+      'full_name': 'KUJIMIYO DAVID ABAYOMI',
+      'email': 'd.abayomi@infinitybank.com',
+    };
+    final dir = <String, Map<String, dynamic>>{'peer-uuid': rpcRow};
+
+    test('prefers full_name from the RPC payload', () {
+      expect(
+        MessagingService.instance.directoryName(dir, 'peer-uuid'),
+        'KUJIMIYO DAVID ABAYOMI',
+      );
+    });
+
+    test('falls back to email, then to a safe generic label', () {
+      expect(
+        MessagingService.instance.directoryName({
+          'peer-uuid': {'user_id': 'peer-uuid', 'email': 'peer@bank.com'},
+        }, 'peer-uuid'),
+        'peer@bank.com',
+      );
+      expect(
+        MessagingService.instance.directoryName(dir, 'unknown-uuid'),
+        'Colleague',
+      );
+      expect(
+        MessagingService.instance.directoryName(dir, null),
+        'Unknown User',
+      );
+    });
+
+    test('a blank full_name does not hide a usable email', () {
+      expect(
+        MessagingService.instance.directoryName({
+          'peer-uuid': {
+            'user_id': 'peer-uuid',
+            'full_name': '   ',
+            'email': 'peer@bank.com',
+          },
+        }, 'peer-uuid'),
+        'peer@bank.com',
+      );
     });
   });
 

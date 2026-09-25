@@ -238,8 +238,12 @@ class MessagingService {
 
   String directoryName(Map<String, Map<String, dynamic>> dir, String? userId) {
     final ident = userId == null ? null : dir[userId];
-    final name = ident?['name'];
-    if (name is String && name.trim().isNotEmpty) return name.trim();
+    // The `resolve_user_identity` RPC returns `full_name` + `email`; `name` is
+    // kept as a fallback for older cached rows.
+    for (final key in const ['full_name', 'name', 'email']) {
+      final value = ident?[key];
+      if (value is String && value.trim().isNotEmpty) return value.trim();
+    }
     return userId == null || userId.isEmpty ? 'Unknown User' : 'Colleague';
   }
 
