@@ -114,8 +114,9 @@ class _ChatScreenState extends State<ChatScreen> {
         _scrollToBottom();
       }
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         showSnack('Message could not be sent. Try again.', isError: true);
+      }
     } finally {
       if (mounted) setState(() => _sending = false);
     }

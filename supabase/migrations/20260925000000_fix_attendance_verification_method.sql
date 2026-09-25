@@ -40,8 +40,8 @@
 -- storable.
 -- ---------------------------------------------------------------------------
 
--- Apply as two explicit, idempotent statements (no PL/pgSQL) so this runs
--- cleanly both in the Supabase SQL editor and via the Management API.
+-- Apply as two explicit, idempotent guarded statements so this runs cleanly
+-- both in the Supabase SQL editor and via the Management API.
 --
 -- 1) attendance_records (idempotent via DO guard, already expanded in prod)
 do $guard1$

@@ -129,7 +129,7 @@ class NotificationService {
             channelDescription: 'Attendance and operational alerts',
             importance: Importance.high,
             priority: Priority.high,
-            icon: 'ic_launcher',
+            icon: 'ic_launcher_foreground',
           ),
           iOS: const DarwinNotificationDetails(),
         ),

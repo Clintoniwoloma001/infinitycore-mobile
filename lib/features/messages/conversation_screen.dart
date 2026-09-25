@@ -168,8 +168,9 @@ class _ConversationScreenState extends State<ConversationScreen> {
         await MessagingService.instance.sendChannelMessage(widget.id, body);
       }
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         showSnack('Message could not be sent. Try again.', isError: true);
+      }
     } finally {
       if (mounted) setState(() => _sending = false);
     }

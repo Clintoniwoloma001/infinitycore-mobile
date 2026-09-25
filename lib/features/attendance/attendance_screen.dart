@@ -184,8 +184,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           await session.authenticateBiometric(false);
         } catch (_) {}
       }
-      if (mounted)
+      if (mounted) {
         _fail(StateError('Identity not confirmed. Clock action cancelled.'));
+      }
       return (allow: false, biometricUsed: false);
     }
 
@@ -193,10 +194,11 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       try {
         final serverOk = await session.authenticateBiometric(true);
         if (!serverOk) {
-          if (mounted)
+          if (mounted) {
             _fail(
               StateError('Could not refresh biometric session on the server.'),
             );
+          }
           return (allow: false, biometricUsed: false);
         }
       } catch (e) {
