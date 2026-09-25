@@ -15,13 +15,15 @@ import '../../shared/models/models.dart';
 /// Supabase Edge Function — that is out of scope for the client. Local
 /// notifications are used for in-app events (clock-in/out confirmations,
 /// SARA replies) and tapping a notification routes to the relevant screen.
+enum NotificationQuickAction { clockIn, clockOut }
+
 class NotificationService {
   NotificationService._();
 
   static final NotificationService instance = NotificationService._();
 
   final _plugin = FlutterLocalNotificationsPlugin();
-  final _android = AndroidInitializationSettings('@mipmap/ic_launcher');
+  final _android = AndroidInitializationSettings('ic_launcher_foreground');
   bool _ready = false;
 
   /// Map of notification id → route.
@@ -31,8 +33,25 @@ class NotificationService {
   static const reminderClockInId = 901;
   static const reminderClockOutId = 902;
 
-  /// Quick action title shown on reminder notifications.
+  /// Actions shown on reminder notifications.
   static const quickClockInAction = 'quick_clock_in';
+  static const quickClockOutAction = 'quick_clock_out';
+
+  /// Attendance listens to this notifier so an action can run the real,
+  /// geofence-checked punch path rather than merely opening the tab.
+  static final ValueNotifier<int> quickActionChanged = ValueNotifier<int>(0);
+  static NotificationQuickAction? _pendingQuickAction;
+
+  static NotificationQuickAction? takePendingQuickAction() {
+    final action = _pendingQuickAction;
+    _pendingQuickAction = null;
+    return action;
+  }
+
+  static void _queueQuickAction(NotificationQuickAction action) {
+    _pendingQuickAction = action;
+    quickActionChanged.value++;
+  }
 
   Future<void> init() async {
     if (_ready) return;
@@ -52,18 +71,42 @@ class NotificationService {
       onDidReceiveNotificationResponse: _onTap,
     );
     _ready = true;
+
+    // Handle a notification action that cold-started the app. The attendance
+    // screen consumes the queued action after the router has mounted.
+    final launch = await _plugin.getNotificationAppLaunchDetails();
+    if (launch?.didNotificationLaunchApp == true) {
+      _onTap(launch?.notificationResponse);
+    }
   }
 
-  Future<void> requestPermissions() async {
+  /// Request notification and exact-alarm access before reminders are armed.
+  /// Android 13+ requires POST_NOTIFICATIONS at runtime; Android 12+ requires
+  /// exact-alarm access for the HR-configured minute.
+  Future<bool> requestPermissions() async {
     await init();
     try {
-      await _plugin
+      final android = _plugin
           .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin
-          >()
-          ?.requestNotificationsPermission();
-    } catch (_) {
-      // Permission prompting unsupported on this platform.
+          >();
+      if (android == null) return true;
+      final notifications = await android.requestNotificationsPermission();
+      final exactAlarms = await android.requestExactAlarmsPermission();
+      if (notifications == false) {
+        debugPrint(
+          'InfinityCore notifications are disabled; reminders cannot be shown.',
+        );
+      }
+      if (exactAlarms == false) {
+        debugPrint(
+          'InfinityCore exact-alarm access is disabled; reminders may be delayed.',
+        );
+      }
+      return notifications != false && exactAlarms != false;
+    } catch (error, stack) {
+      debugPrint('Notification permission request failed: $error\n$stack');
+      return false;
     }
   }
 
@@ -98,7 +141,13 @@ class NotificationService {
   }
 
   void _onTap(NotificationResponse? response) {
-    if (response?.actionId == quickClockInAction) {
+    final actionId = response?.actionId;
+    if (actionId == quickClockInAction || actionId == quickClockOutAction) {
+      _queueQuickAction(
+        actionId == quickClockInAction
+            ? NotificationQuickAction.clockIn
+            : NotificationQuickAction.clockOut,
+      );
       appRouter.go('/home');
       HomeShell.requestTab.value = 'attendance';
       return;
@@ -112,6 +161,7 @@ class NotificationService {
     } catch (_) {}
     if (route != null && route.isNotEmpty) {
       appRouter.go(route);
+      if (route == '/home') HomeShell.requestTab.value = 'attendance';
     }
   }
 
@@ -142,6 +192,8 @@ class NotificationService {
         title: 'Time to clock in',
         body: 'Record your clock-in while you are at your approved location.',
         when: _nextAt(location, partsIn.$1, partsIn.$2),
+        actionId: quickClockInAction,
+        actionTitle: 'Yes, clock in',
       );
     }
     if (clockedInToday && !clockedOutToday && partsOut != null) {
@@ -150,6 +202,8 @@ class NotificationService {
         title: 'Time to clock out',
         body: 'Remember to clock out before you leave your approved location.',
         when: _nextAt(location, partsOut.$1, partsOut.$2),
+        actionId: quickClockOutAction,
+        actionTitle: 'Yes, clock out',
       );
     }
   }
@@ -159,39 +213,59 @@ class NotificationService {
     required String title,
     required String body,
     required tz.TZDateTime when,
+    required String actionId,
+    required String actionTitle,
   }) async {
+    final details = NotificationDetails(
+      android: AndroidNotificationDetails(
+        'infinitycore',
+        'InfinityCore',
+        channelDescription: 'Attendance and operational alerts',
+        importance: Importance.high,
+        priority: Priority.high,
+        icon: 'ic_launcher_foreground',
+        playSound: true,
+        enableVibration: true,
+        actions: [
+          AndroidNotificationAction(
+            actionId,
+            actionTitle,
+            showsUserInterface: true,
+          ),
+        ],
+      ),
+      iOS: const DarwinNotificationDetails(
+        interruptionLevel: InterruptionLevel.timeSensitive,
+      ),
+    );
     try {
       await _plugin.zonedSchedule(
         id,
         title,
         body,
         when,
-        const NotificationDetails(
-          android: AndroidNotificationDetails(
-            'infinitycore',
-            'InfinityCore',
-            channelDescription: 'Attendance and operational alerts',
-            importance: Importance.high,
-            priority: Priority.high,
-            icon: 'ic_launcher',
-            playSound: true,
-            enableVibration: true,
-            actions: [
-              AndroidNotificationAction(
-                quickClockInAction,
-                'Clock in now',
-                showsUserInterface: true,
-              ),
-            ],
-          ),
-          iOS: DarwinNotificationDetails(
-            interruptionLevel: InterruptionLevel.timeSensitive,
-          ),
-        ),
-        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        details,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        payload: '{"$_routeKey":"/home"}',
       );
-    } catch (_) {
-      // Scheduled notifications unavailable (permissions or platform limits).
+    } catch (error) {
+      // rather than silently dropping the reminder.
+      debugPrint('Exact reminder scheduling failed; using inexact: $error');
+      try {
+        await _plugin.zonedSchedule(
+          id,
+          title,
+          body,
+          when,
+          details,
+          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+          payload: '{"$_routeKey":"/home"}',
+        );
+      } catch (fallbackError, fallbackStack) {
+        debugPrint(
+          'Reminder scheduling failed: $fallbackError\n$fallbackStack',
+        );
+      }
     }
   }
 

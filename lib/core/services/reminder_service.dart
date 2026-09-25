@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
@@ -15,7 +15,7 @@ import 'supabase_service.dart';
 /// (`mobile_reminder_settings_get`). Scheduling is re-armed on sign-in,
 /// app start, and after every attendance write so reminders stop once the
 /// corresponding punch is recorded.
-class ReminderService {
+class ReminderService with WidgetsBindingObserver {
   ReminderService._();
 
   static final ReminderService instance = ReminderService._();
@@ -25,6 +25,7 @@ class ReminderService {
   Future<void> start() async {
     if (_started) return;
     _started = true;
+    WidgetsBinding.instance.addObserver(this);
 
     // Re-arm when the session changes (login/logout/binding).
     SupabaseService.client.auth.onAuthStateChange.listen((_) {
@@ -32,6 +33,13 @@ class ReminderService {
     });
     // Initial sync for a restored session.
     sync();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      sync();
+    }
   }
 
   Future<void> sync() async {

@@ -4,6 +4,7 @@ import '../../core/services/auth_service.dart';
 import '../../core/services/biometrics.dart';
 import '../../core/services/mobile_session_service.dart';
 import '../../core/services/notification_service.dart';
+import '../../core/services/reminder_service.dart';
 import '../../core/security/location_integrity.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/models/models.dart';
@@ -39,7 +40,30 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   @override
   void initState() {
     super.initState();
+    NotificationService.quickActionChanged.addListener(_consumeQuickAction);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _consumeQuickAction());
     _load();
+  }
+
+  @override
+  void dispose() {
+    NotificationService.quickActionChanged.removeListener(_consumeQuickAction);
+    super.dispose();
+  }
+
+  void _consumeQuickAction() {
+    if (!mounted) return;
+    final action = NotificationService.takePendingQuickAction();
+    if (action == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      switch (action) {
+        case NotificationQuickAction.clockIn:
+          _clockIn();
+        case NotificationQuickAction.clockOut:
+          _clockOut();
+      }
+    });
   }
 
   Future<void> _load() async {
@@ -72,7 +96,14 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     }
   }
 
-  Future<GeoCheck> _checkLocation() async {
+  /// Fetch a fresh fix through the same path used by both the preview button
+  /// and clock actions. No cached value is consulted, so the first clock tap
+  /// behaves exactly like a manual location refresh.
+  Future<({PositionFix position, GeoCheck check})>
+  _fetchCurrentLocation() async {
+    if (!mounted) {
+      throw StateError('Attendance screen is no longer available.');
+    }
     setState(() => _geoStatus = 'checking');
     try {
       final position = await _service.currentLocation();
@@ -83,11 +114,16 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           _geoStatus = 'ok';
         });
       }
-      return check;
-    } catch (e) {
+      return (position: position, check: check);
+    } catch (_) {
       if (mounted) setState(() => _geoStatus = 'denied');
       rethrow;
     }
+  }
+
+  Future<GeoCheck> _checkLocation() async {
+    final result = await _fetchCurrentLocation();
+    return result.check;
   }
 
   /// Gate a clock action behind the device's native biometric system when the
@@ -184,10 +220,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     if (!verified.allow) return;
     setState(() => _busy = true);
     try {
-      final position = await _service.currentLocation();
-      NotificationService.instance.requestPermissions();
+      final location = await _fetchCurrentLocation();
       final result = await _service.clockIn(
-        position,
+        location.position,
         biometricUsed: verified.biometricUsed,
         terminalId: _terminalId,
       );
@@ -195,7 +230,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       if (!mounted) return;
       setState(() {
         _today = record ?? _today;
-        _position = position;
+        _position = location.position;
       });
       await NotificationService.instance.show(
         id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
@@ -207,6 +242,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       );
       _success('Clocked in. Have a productive day!');
       _load();
+      await ReminderService.instance.sync();
     } catch (e) {
       debugPrint('Attendance._clockIn: error=${e.runtimeType}: $e');
       _fail(e);
@@ -222,15 +258,15 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     if (!verified.allow) return;
     setState(() => _busy = true);
     try {
-      final position = await _service.currentLocation();
+      final location = await _fetchCurrentLocation();
       final result = await _service.clockOut(
         today.id,
-        geo: position,
+        geo: location.position,
         biometricUsed: verified.biometricUsed,
         terminalId: _terminalId,
       );
       if (!mounted) return;
-      setState(() => _position = position);
+      setState(() => _position = location.position);
       await NotificationService.instance.show(
         id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
         title: 'Clocked Out',
@@ -239,6 +275,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       );
       _success('Clocked out. See you next time!');
       _load();
+      await ReminderService.instance.sync();
     } catch (e) {
       _fail(e);
     } finally {
@@ -876,8 +913,10 @@ class _LocationBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final emulatorDefault = LocationIntegrity.instance
-        .looksLikeEmulatorDefault(position.lat, position.lng);
+    final emulatorDefault = LocationIntegrity.instance.looksLikeEmulatorDefault(
+      position.lat,
+      position.lng,
+    );
     return Card(
       margin: EdgeInsets.zero,
       color: AppColors.isDark(context)
@@ -906,13 +945,11 @@ class _LocationBanner extends StatelessWidget {
                 'Current fix: ${position.lat.toStringAsFixed(6)}, '
                 '${position.lng.toStringAsFixed(6)} '
                 '(±${position.accuracy.toStringAsFixed(1)}m). '
-                '${emulatorDefault
-                    ? 'This is the Android emulator\u2019s default Googleplex '
-                        'location, not a real GPS fix. Set the device location '
-                        '(emulator \u22EE \u2192 Location) or use a physical '
-                        'device before clocking in.'
-                    : 'The server treats this as authoritative attendance '
-                        'evidence.'}',
+                '${emulatorDefault ? 'This is the Android emulator\u2019s default Googleplex '
+                          'location, not a real GPS fix. Set the device location '
+                          '(emulator \u22EE \u2192 Location) or use a physical '
+                          'device before clocking in.' : 'The server treats this as authoritative attendance '
+                          'evidence.'}',
                 style: TextStyle(
                   fontSize: 12,
                   color: AppColors.textPrimary(context),

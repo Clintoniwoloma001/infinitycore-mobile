@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:timezone/data/latest_all.dart' as tzdata;
@@ -56,13 +58,29 @@ class AttendanceService {
 
   Future<PositionFix> currentLocation() async {
     await ensureLocationPermission();
-    final position = await Geolocator.getCurrentPosition(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-        timeLimit: Duration(seconds: 15),
-      ),
-    );
-    return PositionFix.from(position);
+    try {
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 15),
+        ),
+      );
+      return PositionFix.from(position);
+    } on TimeoutException {
+      throw StateError(
+        'Location request timed out. Move to an area with a clear GPS signal '
+        'and try again.',
+      );
+    } on LocationServiceDisabledException {
+      throw StateError(
+        'Location services are turned off. Enable location to clock in or out.',
+      );
+    } catch (error) {
+      throw StateError(
+        'Could not obtain a current location fix. Check location services, '
+        'permission, and GPS signal, then try again. (${error.runtimeType})',
+      );
+    }
   }
 
   Future<EmployeeRef?> getMyEmployee() async {

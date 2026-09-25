@@ -23,9 +23,12 @@ Future<void> main() async {
 
   await SupabaseService.initialize();
 
-  // Non-blocking: never delays first frame; failures are swallowed.
+  // Non-blocking update check; it must not delay the first frame.
   AppUpdates.instance.checkForUpdates();
-  NotificationService.instance.requestPermissions();
+
+  // Request runtime notification/exact-alarm access before reminders are
+  // armed. Awaiting this keeps Android's first-launch prompt deterministic.
+  await NotificationService.instance.requestPermissions();
   ReminderService.instance.start();
 
   await ThemeController.instance.load();
