@@ -13,6 +13,11 @@ import '../../features/auth/splash_screen.dart';
 import '../../features/attendance/attendance_management_screen.dart';
 import '../../features/attendance/public_terminal_screen.dart';
 import '../../features/dashboard/home_shell.dart';
+import '../../features/messages/announcements_screen.dart';
+import '../../features/messages/chat_screen.dart';
+import '../../features/messages/comm_admin_screen.dart';
+import '../../features/messages/conversation_screen.dart';
+import '../../features/messages/messages_screen.dart';
 import '../../features/profile/profile_screen.dart';
 
 /// Global messenger so background services (notifications, sync) can surface
@@ -57,6 +62,43 @@ final GoRouter appRouter = GoRouter(
       path: '/bound-devices',
       builder: (_, _) => const BoundDevicesScreen(),
     ),
+
+    // ----------------------------------------------------------------
+    // Messaging. These routes were previously pushed by MessagesScreen but
+    // never registered, so the whole module was unreachable. Ordering matters:
+    // the static children below are declared before the `:threadId` parameter
+    // route so `channel`, `group` and `announcements` are not swallowed by it.
+    // ----------------------------------------------------------------
+    GoRoute(path: '/messages', builder: (_, _) => const MessagesScreen()),
+    GoRoute(
+      path: '/messages/announcements',
+      builder: (_, _) => const AnnouncementsScreen(),
+    ),
+    GoRoute(
+      path: '/messages/channel/:id',
+      builder: (_, state) => ConversationScreen(
+        kind: ConversationKind.channel,
+        id: state.pathParameters['id'] ?? '',
+      ),
+    ),
+    GoRoute(
+      path: '/messages/group/:id',
+      builder: (_, state) => ConversationScreen(
+        kind: ConversationKind.group,
+        id: state.pathParameters['id'] ?? '',
+      ),
+    ),
+    GoRoute(
+      path: '/messages/:threadId',
+      builder: (_, state) =>
+          ChatScreen(threadId: state.pathParameters['threadId'] ?? ''),
+    ),
+
+    // Comm Admin. The navigation gate lives in `auth_gate.dart`; the data
+    // itself is protected server-side by `is_communication_admin()` and the
+    // RLS/RPC policies, so this is convenience rather than the security
+    // boundary.
+    GoRoute(path: '/comm-admin', builder: (_, _) => const CommAdminScreen()),
   ],
 );
 

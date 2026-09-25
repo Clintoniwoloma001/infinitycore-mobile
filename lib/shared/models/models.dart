@@ -547,6 +547,11 @@ class ChatMessage {
   final String fileType;
   final String createdAt;
 
+  /// The full backend row, so newer server columns (priority, is_official,
+  /// is_pinned, parent_message_id, …) are available without the client having
+  /// to re-declare the schema. Unknown columns are simply not modelled.
+  final Map<String, dynamic> raw;
+
   const ChatMessage({
     required this.id,
     this.threadId = '',
@@ -555,6 +560,7 @@ class ChatMessage {
     this.fileUrl = '',
     this.fileType = '',
     this.createdAt = '',
+    this.raw = const {},
   });
 
   factory ChatMessage.fromJson(dynamic v) {
@@ -567,6 +573,7 @@ class ChatMessage {
       fileUrl: _s(m['file_url'], _s(m['attachment_url'])),
       fileType: _s(m['file_type'], _s(m['attachment_type'])),
       createdAt: _s(m['created_at']),
+      raw: m,
     );
   }
 }

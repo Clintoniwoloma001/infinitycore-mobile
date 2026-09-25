@@ -8,6 +8,7 @@ import 'core/services/reminder_service.dart';
 import 'core/services/supabase_service.dart';
 import 'core/theme/theme_controller.dart';
 import 'core/updates/app_updates.dart';
+import 'features/messages/messaging_hub.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,6 +31,12 @@ Future<void> main() async {
   // armed. Awaiting this keeps Android's first-launch prompt deterministic.
   await NotificationService.instance.requestPermissions();
   ReminderService.instance.start();
+
+  // Web <-> mobile message sync. The hub owns a single Supabase Realtime
+  // subscription for chat_messages, so it must be started once at app launch
+  // (it is idempotent and safe to call again from a screen). It also restores
+  // the offline outbox and keeps the unread badge current.
+  MessagingHub.instance.start();
 
   await ThemeController.instance.load();
 

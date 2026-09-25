@@ -115,5 +115,14 @@ String? redirectDecision(AuthGateState auth, String loc, Uri uri) {
     return '/home';
   }
 
+  // Communication Administration is restricted to the same roles as the web
+  // Comm Admin page (mirrored by `canAccessCommAdmin`). Hiding the nav entry
+  // is not enough — an unauthorized user who deep-links here is redirected
+  // away before any screen mounts and before any query runs. The authoritative
+  // check remains `public.is_communication_admin()` in Postgres.
+  if (loc.startsWith('/comm-admin') && !canAccessCommAdmin(auth.role)) {
+    return '/home';
+  }
+
   return null;
 }

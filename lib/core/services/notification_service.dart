@@ -33,6 +33,12 @@ class NotificationService {
   static const reminderClockInId = 901;
   static const reminderClockOutId = 902;
 
+  /// Android channel ids. Messaging and announcements are separated so a user
+  /// can silence routine chat without losing official notices.
+  static const channelMessages = 'infinitycore_messages';
+  static const channelAnnouncements = 'infinitycore_announcements';
+  static const channelId = 'infinitycore';
+
   /// Actions shown on reminder notifications.
   static const quickClockInAction = 'quick_clock_in';
   static const quickClockOutAction = 'quick_clock_out';
@@ -110,11 +116,20 @@ class NotificationService {
     }
   }
 
+  /// Shows an immediate in-app notification through the existing local
+  /// notification system.
+  ///
+  /// [channel] selects the Android channel (routine messages vs official
+  /// announcements) and [highPriority] controls heads-up behaviour. Both
+  /// default to the existing InfinityCore channel, so pre-existing callers —
+  /// attendance, SARA, reminders — behave exactly as before.
   Future<void> show({
     required int id,
     required String title,
     required String body,
     String? route,
+    String channel = channelId,
+    bool highPriority = false,
   }) async {
     await init();
     try {
@@ -124,14 +139,25 @@ class NotificationService {
         body,
         NotificationDetails(
           android: AndroidNotificationDetails(
-            'infinitycore',
-            'InfinityCore',
-            channelDescription: 'Attendance and operational alerts',
-            importance: Importance.high,
-            priority: Priority.high,
+            channel,
+            channel == channelAnnouncements
+                ? 'Announcements'
+                : channel == channelMessages
+                ? 'Messages'
+                : 'InfinityCore',
+            channelDescription:
+                'Messages, announcements and operational alerts',
+            importance: highPriority
+                ? Importance.high
+                : Importance.defaultImportance,
+            priority: highPriority ? Priority.high : Priority.defaultPriority,
             icon: 'ic_launcher_foreground',
           ),
-          iOS: const DarwinNotificationDetails(),
+          iOS: DarwinNotificationDetails(
+            interruptionLevel: highPriority
+                ? InterruptionLevel.timeSensitive
+                : InterruptionLevel.active,
+          ),
         ),
         payload: route == null ? null : '{"$_routeKey":"$route"}',
       );

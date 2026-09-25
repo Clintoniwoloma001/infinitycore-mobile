@@ -8,6 +8,8 @@ import '../../shared/models/models.dart';
 class AppRoles {
   static const superAdmin = 'super_admin';
   static const admin = 'admin';
+  static const hrManager = 'hr_manager';
+  static const operationsManager = 'operations_manager';
   static const branchManager = 'branch_manager';
   static const areaManager = 'area_manager';
   static const headOfBusiness = 'head_of_business';
@@ -52,6 +54,10 @@ class AppRoles {
         return 'Super Admin';
       case admin:
         return 'Admin';
+      case hrManager:
+        return 'HR Manager';
+      case operationsManager:
+        return 'Operations Manager';
       case branchManager:
         return 'Branch Manager';
       case areaManager:
@@ -435,4 +441,40 @@ bool canManageAttendance(String role) => const [
   AppRoles.headOfHumanResources,
   AppRoles.hrOfficer,
   AppRoles.branchManager,
+].contains(role);
+
+/// Communication Administration access.
+///
+/// Mirrors the web `CommunicationAdmin` page gate (`ADMIN_ROLES`) and the
+/// database helper `public.is_communication_admin()`, which is the real
+/// authority behind every Comm Admin RPC/RLS policy. The web list uses
+/// `head_of_human_resources`; the database helper uses `hr_manager`; both are
+/// accepted so a rename on either side does not silently strand a user.
+///
+/// This is a *navigation/UI* gate only. An unauthorized user who deep-links to
+/// `/comm-admin` is redirected away, and even bypassing the client still hits
+/// RLS/SECURITY DEFINER RPCs that refuse the read.
+bool canAccessCommAdmin(String role) => const [
+  AppRoles.superAdmin,
+  AppRoles.admin,
+  AppRoles.hrManager,
+  AppRoles.headOfHumanResources,
+  AppRoles.hrOfficer,
+].contains(role);
+
+/// Announcement authoring — mirrors `public.can_author_announcement()`.
+///
+/// Deliberately broader than [canAccessCommAdmin]: branch/area managers and
+/// heads of business may publish to their own audience even though they cannot
+/// open the administration centre.
+bool canAuthorAnnouncement(String role) => const [
+  AppRoles.superAdmin,
+  AppRoles.admin,
+  AppRoles.hrManager,
+  AppRoles.headOfHumanResources,
+  AppRoles.hrOfficer,
+  AppRoles.branchManager,
+  AppRoles.areaManager,
+  AppRoles.operationsManager,
+  AppRoles.headOfBusiness,
 ].contains(role);
