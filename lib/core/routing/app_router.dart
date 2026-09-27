@@ -67,12 +67,13 @@ final GoRouter appRouter = GoRouter(
     // Header destinations. Both screens already existed but were unreachable
     // because no route was registered for them — the bell and the SARA bubble
     // now land here instead of on a dead end.
+    //
+    // NOTE: NotificationsScreen supplies its own Scaffold + shellAppBar, so it
+    // must NOT be wrapped again here — that double-draws the app bar. SARA has
+    // no Scaffold of its own, so it still needs the wrapper.
     GoRoute(
       path: '/notifications',
-      builder: (context, _) => Scaffold(
-        appBar: shellAppBar(context, title: 'Notifications'),
-        body: const NotificationsScreen(),
-      ),
+      builder: (_, _) => const NotificationsScreen(),
     ),
     GoRoute(
       path: '/sara',

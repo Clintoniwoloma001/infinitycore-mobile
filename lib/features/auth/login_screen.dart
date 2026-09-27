@@ -84,11 +84,45 @@ class _LoginScreenState extends State<LoginScreen> {
       // signIn throws here so the error surfaces without a Home flash.
     } catch (e) {
       setState(() {
-        _error = e.toString().replaceAll('Exception: ', '');
+        _error = _friendlyAuthError(e);
       });
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// Maps a raw Supabase/PostgreSQL failure onto copy a user can act on.
+  /// The technical detail is still logged for debugging, but never rendered.
+  String _friendlyAuthError(Object e) {
+    AuthTrace.log('login', 'FAILED: $e');
+    final raw = e.toString().toLowerCase();
+    if (raw.contains('moobile_unauthorized_device') ||
+        raw.contains('mobile_unauthorized_device')) {
+      return 'This account is already linked to another mobile device. '
+          'Please contact HR or Super Admin to authorize this device.';
+    }
+    if (raw.contains('invalid_login_credentials') ||
+        raw.contains('invalid_credentials')) {
+      return 'That email and password combination was not recognised. '
+          'Please check and try again.';
+    }
+    if (raw.contains('email_not_confirmed')) {
+      return 'This account has not been activated yet. '
+          'Please use "Activate account" first.';
+    }
+    if (raw.contains('too_many_requests') ||
+        raw.contains('rate_limit') ||
+        raw.contains('email_rate_limit')) {
+      return 'Too many attempts. Please wait a minute and try again.';
+    }
+    if (raw.contains('failed to fetch') ||
+        raw.contains('socket') ||
+        raw.contains('connection') ||
+        raw.contains('network')) {
+      return 'Cannot reach InfinityCore right now. '
+          'Check your connection and try again.';
+    }
+    return 'Sign-in failed. Please try again, or contact HR if this persists.';
   }
 
   Future<void> _forgotPassword() async {
