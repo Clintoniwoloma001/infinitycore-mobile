@@ -23,7 +23,14 @@ import 'messaging_service.dart';
 ///     membership (managed server-side)
 ///   - Groups tab: user-created groups with member management
 class MessagesScreen extends StatefulWidget {
-  const MessagesScreen({super.key});
+  const MessagesScreen({super.key, this.embedded = false});
+
+  /// True when the screen is hosted inside [HomeShell]'s tab bar. HomeShell
+  /// already paints a shell app bar carrying the title, bell and overflow
+  /// menu, so an embedded instance must not draw a second one on top of it.
+  /// The Announcements / Comm Admin actions move into a row under the shell
+  /// bar instead of being dropped.
+  final bool embedded;
 
   @override
   State<MessagesScreen> createState() => _MessagesScreenState();
@@ -138,26 +145,28 @@ class _MessagesScreenState extends State<MessagesScreen>
     // Comm Admin visibility mirrors the web `CommunicationAdmin` gate. The
     // server remains the authority; this only keeps the nav honest.
     final canAdmin = canAccessCommAdmin(AuthService.instance.role);
+    final actions = <Widget>[
+      IconButton(
+        tooltip: 'Announcements',
+        icon: const Icon(Icons.notifications_active_outlined),
+        onPressed: () async {
+          await context.push('/messages/announcements');
+          if (mounted) await _load();
+        },
+      ),
+      if (canAdmin)
+        IconButton(
+          tooltip: 'Comm Admin',
+          icon: const Icon(Icons.shield),
+          onPressed: () => context.push('/comm-admin'),
+        ),
+    ];
     return Scaffold(
-      appBar: shellAppBar(
+      // See `embedded`: inside HomeShell the shell owns the app bar.
+      appBar: widget.embedded ? null : shellAppBar(
         context,
         title: 'Messages',
-        actionsExtra: [
-          IconButton(
-            tooltip: 'Announcements',
-            icon: const Icon(Icons.notifications_active_outlined),
-            onPressed: () async {
-              await context.push('/messages/announcements');
-              if (mounted) await _load();
-            },
-          ),
-          if (canAdmin)
-            IconButton(
-              tooltip: 'Comm Admin',
-              icon: const Icon(Icons.shield),
-              onPressed: () => context.push('/comm-admin'),
-            ),
-        ],
+        actionsExtra: actions,
       ),
       body: _loading
           ? const PageLoadingView(label: 'Loading messages…')
@@ -165,6 +174,14 @@ class _MessagesScreenState extends State<MessagesScreen>
           ? PageErrorView(message: _error!, onRetry: _load)
           : Column(
               children: [
+                if (widget.embedded)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: actions),
+                    ),
+                  ),
                 _SearchBar(onChanged: (v) => setState(() => _query = v)),
                 TabBar(
                   controller: _tabs,

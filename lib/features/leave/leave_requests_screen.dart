@@ -116,19 +116,32 @@ class _LeaveRequestsScreenState extends State<LeaveRequestsScreen> {
     }
     return Scaffold(
       backgroundColor: Colors.transparent,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _openComposer,
-        backgroundColor: AppColors.accent(context),
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.add),
-        label: const Text('Request leave'),
-      ),
+      // No floatingActionButton here. HomeShell already pins the SARA chat
+      // bubble to the bottom-right, and an inner Scaffold FAB lands on exactly
+      // the same anchor, so the two overlap. The primary action rides at the
+      // end of the balance strip instead, which cannot collide.
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
           children: [
             _BalanceStrip(balances: _balances),
+            const SizedBox(height: 14),
+            // Primary action, inline. See the note on this Scaffold's missing
+            // floatingActionButton: the shell's SARA bubble owns that corner.
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _openComposer,
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.accent(context),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                icon: const Icon(Icons.add),
+                label: const Text('Request leave'),
+              ),
+            ),
             const SizedBox(height: 16),
             _StatusFilter(
               selected: _filter,

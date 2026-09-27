@@ -81,7 +81,7 @@ class _HomeShellState extends State<HomeShell> {
         'Messages',
         Icons.forum_outlined,
         Icons.forum,
-        MessagesScreen(),
+        MessagesScreen(embedded: true),
       ),
       const _TabDef(
         'Leave',
