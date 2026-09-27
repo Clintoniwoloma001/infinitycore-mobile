@@ -3,6 +3,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'app/infinity_core_app.dart';
 import 'core/config/env.dart';
+import 'core/services/notification_badge.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/reminder_service.dart';
 import 'core/services/supabase_service.dart';
@@ -37,6 +38,10 @@ Future<void> main() async {
   // (it is idempotent and safe to call again from a screen). It also restores
   // the offline outbox and keeps the unread badge current.
   MessagingHub.instance.start();
+
+  // Header bell: unread official notifications, kept live alongside the
+  // messaging hub's unread-message count.
+  NotificationBadge.instance.start();
 
   await ThemeController.instance.load();
 

@@ -368,6 +368,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           else ...[
             const SizedBox(height: 4),
             _SessionBanner(),
+            _ReminderDeliveryBanner(),
             if (_position != null) ...[
               const SizedBox(height: 12),
               _LocationBanner(position: _position!),
@@ -423,6 +424,83 @@ class _SessionBanner extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ReminderDeliveryBanner extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<ReminderDeliveryStatus>(
+      valueListenable: NotificationService.deliveryStatus,
+      builder: (context, status, _) {
+        if (status == ReminderDeliveryStatus.unknown ||
+            status == ReminderDeliveryStatus.alarmGrade) {
+          return const SizedBox.shrink();
+        }
+
+        final isBlocked = status == ReminderDeliveryStatus.blocked;
+        final icon = isBlocked ? Icons.notifications_off_outlined : Icons.alarm_off_outlined;
+        final color = isBlocked ? AppColors.rose : AppColors.amber;
+        final title = isBlocked
+            ? 'Attendance reminders blocked'
+            : 'Exact alarm access recommended';
+        final message = isBlocked
+            ? 'Notifications are disabled on this device. Clock-in and clock-out alarms cannot be delivered.'
+            : 'Exact alarms are restricted. Reminders will play but timing may be delayed by the system.';
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: color.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(icon, size: 18, color: color),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: color,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        message,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textPrimary(context).withValues(alpha: 0.8),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                TextButton(
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                  onPressed: () async {
+                    await NotificationService.instance.requestPermissions();
+                  },
+                  child: const Text('Fix', style: TextStyle(fontSize: 12)),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

@@ -7,7 +7,9 @@ import '../../core/theme/app_theme.dart';
 import '../attendance/attendance_management_screen.dart';
 import '../attendance/attendance_screen.dart';
 import '../dashboard/dashboard_screen.dart';
-import '../profile/profile_screen.dart';
+import '../leave/leave_requests_screen.dart';
+import '../messages/messages_screen.dart';
+import 'app_menu.dart';
 
 class _TabDef {
   const _TabDef(this.label, this.icon, this.selectedIcon, this.screen);
@@ -73,6 +75,20 @@ class _HomeShellState extends State<HomeShell> {
         Icons.schedule,
         AttendanceScreen(),
       ),
+      // Messaging moved onto the bottom bar (previously reachable only from a
+      // dashboard card), sitting before Leave Requests and Manage.
+      const _TabDef(
+        'Messages',
+        Icons.forum_outlined,
+        Icons.forum,
+        MessagesScreen(),
+      ),
+      const _TabDef(
+        'Leave',
+        Icons.event_note_outlined,
+        Icons.event_note,
+        LeaveRequestsScreen(),
+      ),
       if (canManage)
         const _TabDef(
           'Manage',
@@ -80,18 +96,19 @@ class _HomeShellState extends State<HomeShell> {
           Icons.groups,
           AttendanceManagementScreen(),
         ),
-      const _TabDef(
-        'Profile',
-        Icons.person_outline,
-        Icons.person,
-        ProfileScreen(),
-      ),
     ];
   }
 
   void _goToTab(String tab) {
+    // Friendly aliases so callers can request the tab by screen intent.
+    final wanted = switch (tab.toLowerCase()) {
+      'leave' || 'leave requests' || 'leaverequests' => 'leave',
+      'messages' || 'chat' => 'messages',
+      _ => tab.toLowerCase(),
+    };
     final i = _tabs.indexWhere(
-      (t) => t.label.toLowerCase() == tab.toLowerCase(),
+      (t) => t.label.toLowerCase() == wanted ||
+          t.label.toLowerCase().startsWith(wanted),
     );
     if (i >= 0) setState(() => _index = i);
   }
@@ -105,10 +122,19 @@ class _HomeShellState extends State<HomeShell> {
         context,
         title: tabs[index].label,
         showBackButton: false,
+        actionsExtra: appHeaderActions(context),
       ),
       body: IndexedStack(
         index: index,
         children: [for (final t in tabs) t.screen],
+      ),
+      // SARA stays one tap away from every tab as a chat bubble.
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => context.push('/sara'),
+        backgroundColor: AppColors.accent(context),
+        foregroundColor: Colors.white,
+        tooltip: 'Ask SARA',
+        child: const Icon(Icons.chat_bubble_outline),
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,

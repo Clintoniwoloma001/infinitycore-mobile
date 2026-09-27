@@ -492,7 +492,11 @@ class _ChatScreenState extends State<ChatScreen> {
           onTap: _showProfile,
           child: Row(
             children: [
-              AvatarCircle(name: _otherName, size: 34),
+              AvatarCircle(
+                name: _otherName,
+                size: 34,
+                onTap: _showProfile,
+              ),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(

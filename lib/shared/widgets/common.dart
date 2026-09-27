@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/infinity_logo.dart';
@@ -323,6 +324,7 @@ class AvatarCircle extends StatelessWidget {
     required this.name,
     this.size = 40,
     this.photoUrl,
+    this.onTap,
   });
 
   final String name;
@@ -331,6 +333,10 @@ class AvatarCircle extends StatelessWidget {
   /// Optional signed photo URL. When set, the employee's photo is rendered in
   /// place of the initials, falling back to initials on load failure.
   final String? photoUrl;
+
+  /// Destination override. Defaults to the Profile section, so every avatar in
+  /// the app is a route into Profile without per-screen wiring.
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -348,7 +354,22 @@ class AvatarCircle extends StatelessWidget {
       ),
     );
     final url = photoUrl?.trim() ?? '';
-    if (url.isEmpty) return fallback;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap ?? () => _openProfile(context),
+      child: url.isEmpty ? fallback : _photo(url, fallback),
+    );
+  }
+
+  void _openProfile(BuildContext context) {
+    try {
+      context.push('/profile');
+    } catch (_) {
+      // No router in scope (e.g. a bare widget test) — the avatar still renders.
+    }
+  }
+
+  Widget _photo(String url, Widget fallback) {
     return ClipOval(
       child: Image.network(
         url,

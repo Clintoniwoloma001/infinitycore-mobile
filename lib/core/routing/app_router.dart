@@ -18,7 +18,9 @@ import '../../features/messages/chat_screen.dart';
 import '../../features/messages/comm_admin_screen.dart';
 import '../../features/messages/conversation_screen.dart';
 import '../../features/messages/messages_screen.dart';
+import '../../features/notifications/notifications_screen.dart';
 import '../../features/profile/profile_screen.dart';
+import '../../features/sara/sara_screen.dart';
 
 /// Global messenger so background services (notifications, sync) can surface
 /// SnackBars without a BuildContext.
@@ -61,6 +63,23 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/bound-devices',
       builder: (_, _) => const BoundDevicesScreen(),
+    ),
+    // Header destinations. Both screens already existed but were unreachable
+    // because no route was registered for them — the bell and the SARA bubble
+    // now land here instead of on a dead end.
+    GoRoute(
+      path: '/notifications',
+      builder: (context, _) => Scaffold(
+        appBar: shellAppBar(context, title: 'Notifications'),
+        body: const NotificationsScreen(),
+      ),
+    ),
+    GoRoute(
+      path: '/sara',
+      builder: (context, _) => Scaffold(
+        appBar: shellAppBar(context, title: 'SARA'),
+        body: const SaraScreen(),
+      ),
     ),
 
     // ----------------------------------------------------------------
