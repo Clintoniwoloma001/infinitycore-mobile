@@ -89,9 +89,9 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen> {
                           ),
                           Text(
                             _s('email'),
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
-                              color: Colors.black54,
+                              color: AppColors.textSecondary(context),
                             ),
                           ),
                           const SizedBox(height: 8),
@@ -162,7 +162,7 @@ class _Row extends StatelessWidget {
             width: 130,
             child: Text(
               label,
-              style: const TextStyle(fontSize: 12, color: Colors.black45),
+              style: TextStyle(fontSize: 12, color: AppColors.textTertiary(context)),
             ),
           ),
           Expanded(

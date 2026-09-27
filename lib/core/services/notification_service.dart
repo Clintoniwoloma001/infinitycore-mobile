@@ -7,6 +7,7 @@ import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
 import '../../core/routing/app_router.dart';
+import 'notification_deep_link.dart';
 import '../../features/dashboard/home_shell.dart';
 import '../../shared/models/models.dart';
 
@@ -304,14 +305,23 @@ class NotificationService {
     final payload = response?.payload;
     if (payload == null) return;
     String? route;
+    String? type;
+    String? sourceId;
     try {
       final decoded = jsonDecode(payload) as Map<String, dynamic>?;
       route = decoded?[_routeKey]?.toString();
+      type = decoded?['type']?.toString();
+      sourceId = decoded?['sourceId']?.toString();
     } catch (_) {}
-    if (route != null && route.isNotEmpty) {
-      appRouter.go(route);
-      if (route == '/home') HomeShell.requestTab.value = 'attendance';
-    }
+    // A payload that only carries a route is used verbatim; one that carries a
+    // source descriptor is resolved through the shared deep-link mapper so a
+    // push always opens the same screen as an in-app tap.
+    final target = route != null && route.isNotEmpty
+        ? route
+        : NotificationDeepLink.resolve(type: type, sourceId: sourceId);
+    if (target == null || target.isEmpty) return;
+    appRouter.go(target);
+    if (target == '/home') HomeShell.requestTab.value = 'attendance';
   }
 
   /// Schedule the next clock-in / clock-out reminder in [location] timezone.

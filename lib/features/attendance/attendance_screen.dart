@@ -613,7 +613,7 @@ class _ClockCard extends StatelessWidget {
                     label: const Text('Clock In'),
                     style: FilledButton.styleFrom(
                       backgroundColor: isClockedIn
-                          ? Colors.black26
+                          ? AppColors.textTertiary(context)
                           : AppColors.green,
                     ),
                   ),

@@ -19,6 +19,26 @@ double? _d(dynamic v) {
   return x;
 }
 
+/// Parses an integer column defensively.
+///
+/// Postgres `numeric` / `real` columns — and anything computed by a division —
+/// arrive through PostgREST as a JSON *number* that Dart decodes as a `double`,
+/// so `late_minutes` can legitimately be `45.0` rather than `45`. Routing that
+/// through `int.parse` throws and the old `int.tryParse(_s(...))` fallback
+/// silently produced `0`, which is what made a genuine 45-minute late arrival
+/// display as "on time". Parsing as a double first and truncating handles int,
+/// double and numeric-string spellings uniformly.
+int _i(dynamic v, [int fallback = 0]) {
+  if (v == null) return fallback;
+  if (v is int) return v;
+  if (v is num) return v.toInt();
+  final s = v.toString().trim();
+  if (s.isEmpty) return fallback;
+  final asDouble = double.tryParse(s);
+  if (asDouble != null) return asDouble.toInt();
+  return int.tryParse(s) ?? fallback;
+}
+
 bool _b(dynamic v, [bool fallback = false]) {
   if (v == null) return fallback;
   if (v is bool) return v;
@@ -199,7 +219,7 @@ class ReminderSettings {
     return ReminderSettings(
       clockInTime: _s(m['clock_in_time'], '08:00'),
       clockOutTime: _s(m['clock_out_time'], '18:00'),
-      graceMinutes: int.tryParse(_s(m['grace_minutes'])) ?? 30,
+      graceMinutes: _i(m['grace_minutes'], 30),
       enabled: m['enabled'] != false,
     );
   }
@@ -285,13 +305,13 @@ class AttendanceRequirements {
       requireGpsClockOut: _b(m['require_gps_clock_out'], true),
       geofenceEnabled: _b(m['geofence_enabled'], false),
       defaultGeofenceRadius: _d(m['default_geofence_radius']) ?? 150,
-      lateThresholdMinutes: int.tryParse(_s(m['late_threshold_minutes'])) ?? 15,
+      lateThresholdMinutes: _i(m['late_threshold_minutes'], 15),
       earlyDepartureThresholdMinutes:
-          int.tryParse(_s(m['early_departure_threshold_minutes'])) ?? 30,
+          _i(m['early_departure_threshold_minutes'], 30),
       defaultWorkStartTime: _s(m['default_work_start_time']),
       defaultWorkEndTime: _s(m['default_work_end_time']),
       defaultGracePeriodMinutes:
-          int.tryParse(_s(m['default_grace_period_minutes'])) ?? 0,
+          _i(m['default_grace_period_minutes'], 0),
       defaultWorkingDays: days is List
           ? days.map((d) => d.toString().trim()).toList()
           : const [],
@@ -358,10 +378,9 @@ class AttendanceRecord {
       clockIn: m['clock_in']?.toString(),
       clockOut: m['clock_out']?.toString(),
       status: _s(m['status']),
-      lateMinutes: int.tryParse(_s(m['late_minutes'])) ?? 0,
-      earlyDepartureMinutes:
-          int.tryParse(_s(m['early_departure_minutes'])) ?? 0,
-      overtimeMinutes: int.tryParse(_s(m['overtime_minutes'])) ?? 0,
+      lateMinutes: _i(m['late_minutes']),
+      earlyDepartureMinutes: _i(m['early_departure_minutes']),
+      overtimeMinutes: _i(m['overtime_minutes'], 0),
       workHours: _d(m['work_hours']) ?? 0,
       branchId: _s(m['branch_id']),
       actualLocationName: _s(m['actual_location_name']),
@@ -445,9 +464,9 @@ class AttendanceManagementRow {
       clockOut: m['clock_out']?.toString(),
       status: _s(m['status']),
       workHours: _d(m['work_hours']) ?? 0,
-      totalMinutes: int.tryParse(_s(m['total_minutes'])) ?? 0,
+      totalMinutes: _i(m['total_minutes'], 0),
       lateStatus: _lateStatus(m['late_status']),
-      lateMinutes: int.tryParse(_s(m['late_minutes'])) ?? 0,
+      lateMinutes: _i(m['late_minutes'], 0),
       locationStatus: _s(m['location_status']),
       geofenceStatus: _s(m['geofence_status']),
       clockInLat: _d(m['clock_in_lat']),
@@ -481,6 +500,12 @@ class AppNotification {
   final String type;
   final String createdAt;
 
+  /// Id of the record the notification is about — a message, attendance entry,
+  /// leave request or task. Paired with [sourceType] this is what lets a tap
+  /// open the exact record even when `link` is a browser-only URL or absent.
+  final String? sourceId;
+  final String? sourceType;
+
   const AppNotification({
     required this.id,
     this.title = '',
@@ -489,6 +514,8 @@ class AppNotification {
     this.read = false,
     this.type = 'system',
     this.createdAt = '',
+    this.sourceId,
+    this.sourceType,
   });
 
   factory AppNotification.fromJson(dynamic v) {
@@ -501,6 +528,8 @@ class AppNotification {
       read: _b(m['read']),
       type: _s(m['type'], 'system'),
       createdAt: _s(m['created_at']),
+      sourceId: m['source_id']?.toString(),
+      sourceType: m['source_type']?.toString(),
     );
   }
 }

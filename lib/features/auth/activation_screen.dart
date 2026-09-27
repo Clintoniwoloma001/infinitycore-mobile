@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/services/auth_service.dart';
 import '../../core/services/supabase_service.dart';
+import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/common.dart';
 
 /// Account activation / invitation flow.
@@ -103,12 +104,7 @@ class _ActivationScreenState extends State<ActivationScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
+                  LightPanel(
                     child: _done
                         ? Column(
                             children: [
@@ -157,14 +153,14 @@ class _ActivationScreenState extends State<ActivationScreen> {
                         : Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              const Text(
+                              Text(
                                 'Activation links from Infinity HR contain a '
                                 'secure token. Open this screen through your '
                                 'invitation email so it can be verified.',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
                                   fontSize: 13,
-                                  color: Colors.black54,
+                                  color: AppColors.textSecondary(context),
                                 ),
                               ),
                               const SizedBox(height: 16),

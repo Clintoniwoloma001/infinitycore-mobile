@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/theme/app_theme.dart';
 import 'sara_chat_service.dart';
+import 'sara_mark.dart';
+import 'sara_voice_service.dart';
 
 class SaraScreen extends StatefulWidget {
   const SaraScreen({super.key});
@@ -15,15 +17,52 @@ class _SaraScreenState extends State<SaraScreen> {
   final _controller = TextEditingController();
   final _scroll = ScrollController();
   final List<SaraMessage> _messages = [];
+  final _voice = SaraVoiceService.instance;
   List<String>? _summaryBullets;
   bool _busy = false;
   String? _summaryError;
 
   @override
+  void initState() {
+    super.initState();
+    // A spoken command feeds the same pipeline as a typed one, so voice is not
+    // a second code path that can drift from the chat one.
+    _voice.command.addListener(_onVoiceCommand);
+  }
+
+  @override
   void dispose() {
+    _voice.command.removeListener(_onVoiceCommand);
+    _voice.stopListening();
     _controller.dispose();
     _scroll.dispose();
     super.dispose();
+  }
+
+  void _onVoiceCommand() {
+    final text = _voice.command.value.trim();
+    if (text.isEmpty) return;
+    _voice.command.value = '';
+    _controller.text = text;
+    _send();
+  }
+
+  Future<void> _toggleMic() async {
+    if (_voice.isListening) {
+      _voice.stopListening();
+      return;
+    }
+    final ok = await _voice.startListening();
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _voice.availabilityMessage ?? 'The microphone could not be started.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   void _scrollToBottom() {
@@ -108,21 +147,21 @@ class _SaraScreenState extends State<SaraScreen> {
                       _InlineError(message: _summaryError!),
                     for (final m in _messages) _SaraBubble(message: m),
                     if (_busy)
-                      const Padding(
-                        padding: EdgeInsets.only(top: 8),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
                         child: Row(
                           children: [
-                            SizedBox(
+                            const SizedBox(
                               width: 14,
                               height: 14,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             ),
-                            SizedBox(width: 8),
+                            const SizedBox(width: 8),
                             Text(
                               'SARA is thinking…',
                               style: TextStyle(
                                 fontSize: 12,
-                                color: Colors.black45,
+                                color: AppColors.textSecondary(context),
                               ),
                             ),
                           ],
@@ -135,11 +174,7 @@ class _SaraScreenState extends State<SaraScreen> {
           padding: const EdgeInsets.all(12),
           child: Row(
             children: [
-              const SizedBox(
-                width: 24,
-                height: 24,
-                child: Icon(Icons.bolt, color: AppColors.green, size: 20),
-              ),
+              const SaraMark(size: 24),
               const SizedBox(width: 8),
               Expanded(
                 child: TextField(
@@ -150,32 +185,61 @@ class _SaraScreenState extends State<SaraScreen> {
                   onSubmitted: (_) => _send(),
                   decoration: InputDecoration(
                     hintText: 'Ask SARA anything…',
-                    hintStyle: const TextStyle(
+                    hintStyle: TextStyle(
                       fontSize: 13,
-                      color: Colors.black38,
+                      color: AppColors.textTertiary(context),
                     ),
                     isDense: true,
                     filled: true,
-                    fillColor: Colors.white,
+                    fillColor: AppColors.surface(context),
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 14,
                       vertical: 10,
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(20),
-                      borderSide: const BorderSide(color: Color(0xFFE8EDF4)),
+                      borderSide: BorderSide(color: AppColors.border(context)),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(20),
-                      borderSide: const BorderSide(color: AppColors.green),
+                      borderSide: BorderSide(color: AppColors.accent(context)),
                     ),
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
+              ListenableBuilder(
+                listenable: _voice,
+                builder: (context, _) => IconButton(
+                  onPressed: _toggleMic,
+                  tooltip: _voice.isListening
+                      ? 'Stop listening'
+                      : 'Talk to SARA — say “Hey SARA”',
+                  style: IconButton.styleFrom(
+                    backgroundColor: _voice.isListening
+                        ? AppColors.rose
+                        : AppColors.surface(context),
+                    foregroundColor: _voice.isListening
+                        ? Colors.white
+                        : AppColors.textSecondary(context),
+                    side: BorderSide(
+                      color: _voice.isListening
+                          ? AppColors.rose
+                          : AppColors.border(context),
+                    ),
+                  ),
+                  icon: Icon(
+                    _voice.isListening ? Icons.stop_rounded : Icons.mic_none_rounded,
+                    size: 20,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
               IconButton.filled(
                 onPressed: _busy ? null : _send,
-                style: IconButton.styleFrom(backgroundColor: AppColors.green),
+                style: IconButton.styleFrom(
+                  backgroundColor: AppColors.accent(context),
+                ),
                 icon: const Icon(
                   Icons.arrow_upward,
                   size: 20,
@@ -185,6 +249,29 @@ class _SaraScreenState extends State<SaraScreen> {
             ],
           ),
         ),
+        if (_voice.isListening)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+            child: Row(
+              children: [
+                const Icon(Icons.graphic_eq, size: 16, color: AppColors.rose),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    _voice.pendingCommand == null
+                        ? 'Listening for “Hey SARA”…'
+                        : 'Got it: “${_voice.pendingCommand}”',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary(context),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
       ],
     );
   }
@@ -206,24 +293,26 @@ class _EmptySara extends StatelessWidget {
             width: 64,
             height: 64,
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [AppColors.green, Color(0xFF00C46C)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
+              color: AppColors.brandTint(context, AppColors.orange),
               borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: AppColors.warn(context).withValues(alpha: 0.45),
+              ),
             ),
-            child: const Icon(Icons.bolt, color: Colors.white, size: 36),
+            child: const Center(child: SaraMark(size: 46)),
           ),
           const SizedBox(height: 12),
           const Text(
             'SARA',
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
           ),
-          const Text(
+          Text(
             'Your InfinityCore awareness assistant',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 12, color: Colors.black54),
+            style: TextStyle(
+              fontSize: 12,
+              color: AppColors.textSecondary(context),
+            ),
           ),
           const SizedBox(height: 24),
           FilledButton.icon(
@@ -258,7 +347,7 @@ class _ChipRow extends StatelessWidget {
             child: Align(
               alignment: Alignment.centerLeft,
               child: ActionChip(
-                avatar: Icon(icon, size: 16, color: AppColors.green),
+                avatar: Icon(icon, size: 16, color: AppColors.accent(context)),
                 label: Text(text, style: const TextStyle(fontSize: 12)),
                 onPressed: () {},
               ),
@@ -287,16 +376,20 @@ class _SummaryCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.auto_awesome, size: 14, color: AppColors.green),
-              SizedBox(width: 6),
+              Icon(
+                Icons.auto_awesome,
+                size: 14,
+                color: AppColors.accent(context),
+              ),
+              const SizedBox(width: 6),
               Text(
                 'SARA summary',
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w800,
-                  color: AppColors.greenDark,
+                  color: AppColors.accent(context),
                 ),
               ),
             ],
@@ -308,12 +401,21 @@ class _SummaryCard extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     '• ',
-                    style: TextStyle(color: AppColors.green, fontSize: 13),
+                    style: TextStyle(
+                      color: AppColors.accent(context),
+                      fontSize: 13,
+                    ),
                   ),
                   Expanded(
-                    child: Text(b, style: const TextStyle(fontSize: 13)),
+                    child: Text(
+                      b,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textPrimary(context),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -361,20 +463,27 @@ class _SaraBubble extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         constraints: const BoxConstraints(maxWidth: 340),
         decoration: BoxDecoration(
-          color: fromUser ? AppColors.green : const Color(0xFFF1F5F9),
+          color: fromUser
+              ? AppColors.accent(context)
+              : AppColors.surface(context),
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(14),
             topRight: const Radius.circular(14),
             bottomLeft: Radius.circular(fromUser ? 14 : 4),
             bottomRight: Radius.circular(fromUser ? 4 : 14),
           ),
+          border: fromUser
+              ? null
+              : Border.all(color: AppColors.border(context)),
         ),
         child: Text(
           message.content,
           style: TextStyle(
             fontSize: 13,
             height: 1.35,
-            color: fromUser ? Colors.white : Colors.black87,
+            color: fromUser
+                ? Colors.white
+                : AppColors.textPrimary(context),
           ),
         ),
       ),

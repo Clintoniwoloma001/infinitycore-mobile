@@ -5,6 +5,7 @@ import 'package:local_auth/local_auth.dart';
 import '../../core/diagnostics/auth_trace.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/supabase_service.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/theme/infinity_logo.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -193,12 +194,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 children: [
                   const InfinityCoreLogo(light: true, showTagline: true),
                   const SizedBox(height: 26),
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
+                  LightPanel(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [

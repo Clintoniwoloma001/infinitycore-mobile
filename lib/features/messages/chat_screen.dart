@@ -3,13 +3,14 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/routing/app_router.dart';
 import '../../core/services/supabase_service.dart';
-import '../../core/theme/app_theme.dart';
 import '../../shared/models/models.dart';
 import '../../shared/widgets/common.dart';
 import 'communication_service.dart';
+import 'message_composer.dart';
 import 'message_ui.dart';
 import 'messages_service.dart';
 import 'messaging_hub.dart';
+import 'urgent_ack_service.dart';
 
 /// Direct one-to-one thread screen.
 ///
@@ -27,19 +28,22 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  final _controller = TextEditingController();
   final _scroll = ScrollController();
 
   List<ChatMessage> _messages = [];
   Map<String, Map<String, dynamic>> _directory = const {};
   Map<String, List<Map<String, dynamic>>> _reactions = {};
   Map<String, List<Map<String, dynamic>>> _attachments = {};
+
+  /// message_id → `chat_message_acks` rows, used to render the "N of M
+  /// acknowledged" line and to decide whether the local user still owes one.
+  Map<String, List<Map<String, dynamic>>> _acks = {};
+
   Map<String, dynamic> _other = const {};
   String _otherName = '';
   bool _muted = false;
   bool _loading = true;
   String? _error;
-  bool _sending = false;
 
   String get _me => SupabaseService.client.auth.currentUser?.id ?? '';
 
@@ -55,7 +59,6 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void dispose() {
     MessagingHub.instance.setActiveConversation(null);
-    _controller.dispose();
     _scroll.dispose();
     super.dispose();
   }
@@ -87,6 +90,7 @@ class _ChatScreenState extends State<ChatScreen> {
       var dir = const <String, Map<String, dynamic>>{};
       var reactions = <String, List<Map<String, dynamic>>>{};
       var attachments = <String, List<Map<String, dynamic>>>{};
+      var acks = <String, List<Map<String, dynamic>>>{};
       var muted = false;
       try {
         dir = await CommunicationService.instance.resolveDirectory([
@@ -103,6 +107,9 @@ class _ChatScreenState extends State<ChatScreen> {
           ids,
         )) {
           attachments.putIfAbsent('${row['message_id']}', () => []).add(row);
+        }
+        for (final row in await CommunicationService.instance.acksFor(ids)) {
+          acks.putIfAbsent('${row['message_id']}', () => []).add(row);
         }
       } catch (_) {}
 
@@ -125,6 +132,7 @@ class _ChatScreenState extends State<ChatScreen> {
         _directory = dir;
         _reactions = reactions;
         _attachments = attachments;
+        _acks = acks;
         _muted = muted;
         _other = identity;
         _otherName = '${identity['full_name'] ?? identity['email'] ?? ''}'
@@ -180,15 +188,20 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
-  Future<void> _send() async {
-    final body = _controller.text.trim();
-    if (body.isEmpty || _sending) return;
-    _controller.clear();
-    setState(() => _sending = true);
-    try {
+  /// Sends a composed message.
+  ///
+  /// A plain text message keeps the existing offline-first outbox so a message
+  /// typed on the underground still arrives later. Anything with a priority, an
+  /// acknowledgment requirement or an attachment goes through
+  /// `send_rich_message`, which cannot be queued locally: the server has to
+  /// write the `message_attachments` rows and open the acknowledgment
+  /// obligations atomically with the message, so a failure is reported to the
+  /// user instead of being silently retried later.
+  Future<void> _send(MessageDraft draft) async {
+    if (!draft.isRich) {
       final optimistic = await ChatService.instance.sendMessage(
         threadId: widget.threadId,
-        body: body,
+        body: draft.body,
         senderId: _me,
       );
       if (mounted) {
@@ -200,12 +213,38 @@ class _ChatScreenState extends State<ChatScreen> {
         });
         _scrollToBottom();
       }
-    } catch (_) {
-      if (mounted) {
-        showSnack('Message could not be sent. Try again.', isError: true);
-      }
-    } finally {
-      if (mounted) setState(() => _sending = false);
+      return;
+    }
+
+    try {
+      await CommunicationService.instance.sendRichMessage(
+        contextType: 'direct',
+        contextId: widget.threadId,
+        body: draft.body,
+        priority: draft.priority,
+        requiresAck: draft.requiresAck,
+        files: draft.rpcFiles,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      showSnack(
+        CommunicationService.friendlyError(
+          e,
+          fallback: 'That message could not be sent. Your text is still here — try again.',
+        ),
+        isError: true,
+      );
+      rethrow;
+    }
+
+    // The RPC returns the created row(s); a reload is the simplest way to pick
+    // up the server-assigned id, the `priority`/`requires_ack` columns and the
+    // attachment rows without duplicating the RPC's return shape here.
+    await _load();
+    if (draft.requiresAck) {
+      // Refresh the gate so the recipient-facing obligation is reflected for
+      // the sender's own queue too (e.g. they also owe someone else an ack).
+      UrgentAckService.instance.refresh();
     }
   }
 
@@ -226,10 +265,15 @@ class _ChatScreenState extends State<ChatScreen> {
       )) {
         attachments.putIfAbsent('${row['message_id']}', () => []).add(row);
       }
+      final acks = <String, List<Map<String, dynamic>>>{};
+      for (final row in await CommunicationService.instance.acksFor(ids)) {
+        acks.putIfAbsent('${row['message_id']}', () => []).add(row);
+      }
       if (mounted) {
         setState(() {
           _reactions = reactions;
           _attachments = attachments;
+          _acks = acks;
         });
       }
     } catch (_) {
@@ -237,18 +281,23 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  Future<void> _runAction(
+  /// Runs [action], showing [label] on success and a friendly error on failure.
+  ///
+  /// Returns `true` only when the action actually completed, so callers can
+  /// chain follow-up refreshes without duplicating the try/catch.
+  Future<bool> _runAction(
     String label,
     Future<void> Function() action, {
     bool reload = true,
   }) async {
     try {
       await action();
-      if (!mounted) return;
+      if (!mounted) return false;
       showSnack(label);
       if (reload) await _reloadEnrichment();
+      return true;
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) return false;
       showSnack(
         CommunicationService.friendlyError(
           e,
@@ -256,6 +305,7 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
         isError: true,
       );
+      return false;
     }
   }
 
@@ -613,6 +663,8 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _bubble(ChatMessage m) {
     final mine = m.senderId == _me;
+    final acks = _acks[m.id] ?? const <Map<String, dynamic>>[];
+    final needsMyAck = CommunicationService.ackRequired(m.raw, acks, _me);
     return MessageBubble(
       message: m.raw,
       isMine: mine,
@@ -620,6 +672,11 @@ class _ChatScreenState extends State<ChatScreen> {
       attachments: _attachments[m.id] ?? const [],
       reactions: _reactionsFor(m.id),
       myUserId: _me,
+      acks: acks,
+      needsMyAck: needsMyAck,
+      onAcknowledge: needsMyAck
+          ? () => _acknowledge(m)
+          : null,
       onLongPress: () => _showActions(m),
       onToggleReaction: (emoji, mineReaction) => _runAction(
         mineReaction ? 'Reaction removed' : 'Reaction added',
@@ -630,46 +687,23 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _inputBar(BuildContext context) {
-    return Container(
-      color: AppColors.surface(context),
-      padding: EdgeInsets.fromLTRB(
-        12,
-        8,
-        12,
-        8 + MediaQuery.of(context).padding.bottom,
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: _controller,
-              textInputAction: TextInputAction.send,
-              onSubmitted: (_) => _send(),
-              minLines: 1,
-              maxLines: 4,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(
-                hintText: 'Type a message…',
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          IconButton.filled(
-            onPressed: _sending ? null : _send,
-            style: IconButton.styleFrom(
-              backgroundColor: AppColors.accent(context),
-              disabledBackgroundColor: AppColors.accent(context)
-                  .withValues(alpha: 0.4),
-            ),
-            icon: const Icon(Icons.arrow_right, color: Colors.white, size: 20),
-          ),
-        ],
-      ),
+  /// Records the local user's acknowledgment and refreshes both the in-thread
+  /// ack tally and the global blocking gate.
+  Future<void> _acknowledge(ChatMessage m) async {
+    final ok = await _runAction(
+      'Acknowledged',
+      () => CommunicationService.instance.acknowledgeMessage(m.id),
     );
+    if (!ok) return;
+    await _reloadEnrichment();
+    await UrgentAckService.instance.refresh();
   }
+
+  /// The composer. `MessageComposer` owns its own text field, attachment strip
+  /// and recorder, so the screen no longer keeps a controller or send flag.
+  Widget _inputBar(BuildContext context) => MessageComposer(
+    contextType: 'direct',
+    contextId: widget.threadId,
+    onSend: _send,
+  );
 }

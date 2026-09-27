@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
+import '../../core/services/notification_deep_link.dart';
 import '../../core/services/supabase_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/models/models.dart';
@@ -40,6 +40,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         });
         return;
       }
+      // `source_id` / `source_type` are NOT selected on purpose: the live
+      // `notifications` table (see `infinitycore-sara/schema.sql`) only has
+      // id, user_id, title, message, type, read, link and created_at. Asking
+      // for the missing columns fails the whole query with Postgres 42703
+      // ("column notifications.source_id does not exist") and the screen
+      // shows a bare error instead of the user's notifications. The deep link
+      // is resolved from `type` + `link`, which do exist.
       final res = await SupabaseService.client
           .from('notifications')
           .select('id, title, message, link, read, type, created_at')
@@ -59,25 +66,29 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
   }
 
+  /// Marks the notification read and opens whatever it points at.
+  ///
+  /// `link` alone is not enough: the backend writes browser URLs, and a
+  /// significant number of rows carry no link at all. Falling back to
+  /// `type` + `source_id` is what makes a tap land on the exact message,
+  /// record or task rather than back on this list.
   void _open(AppNotification n) async {
     if (!n.read) {
       await SupabaseService.client
           .from('notifications')
           .update({'read': true})
           .eq('id', n.id);
-      if (!mounted) return;
-      _load();
     }
-    final link = n.link;
-    if (link.isNotEmpty && link.startsWith('/')) {
-      if (!mounted) return;
-      if (link.contains('#/')) {
-        final path = link.split('#/').last.split('?').first;
-        context.go('/$path');
-      } else {
-        context.go(link);
-      }
-    }
+    if (!mounted) return;
+    if (!n.read) _load();
+    final sourceType = (n.sourceType ?? '').trim();
+    final sourceId = (n.sourceId ?? '').trim();
+    NotificationDeepLink.open(
+      context,
+      type: sourceType.isEmpty ? n.type : sourceType,
+      link: n.link,
+      sourceId: sourceId.isEmpty ? null : sourceId,
+    );
   }
 
   @override
@@ -162,7 +173,7 @@ class _NotificationTile extends StatelessWidget {
                   _icon,
                   size: 18,
                   color: notification.read
-                      ? const Color(0xFF64748B)
+                      ? AppColors.textSecondary(context)
                       : AppColors.green,
                 ),
               ),
@@ -177,16 +188,16 @@ class _NotificationTile extends StatelessWidget {
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
                         color: notification.read
-                            ? Colors.black54
+                            ? AppColors.textSecondary(context)
                             : Colors.black,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       notification.message,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: Colors.black54,
+                        color: AppColors.textSecondary(context),
                       ),
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
@@ -195,9 +206,9 @@ class _NotificationTile extends StatelessWidget {
                       const SizedBox(height: 6),
                       Text(
                         Fmt.dateTimeShort(notification.createdAt),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
-                          color: Colors.black38,
+                          color: AppColors.textTertiary(context),
                         ),
                       ),
                     ],

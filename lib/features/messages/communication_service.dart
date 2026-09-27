@@ -359,6 +359,136 @@ class CommunicationService {
     ),
   );
 
+  // ------------------------------------------------------------------
+  // Rich send — attachments + priority + mandatory acknowledgment
+  // ------------------------------------------------------------------
+
+  /// Sends a message with the full option set the web `sendRichMessage`
+  /// exposes: `priority` (`normal` / `high` / `urgent`), `requiresAck`, any
+  /// uploaded [files], mentions and an optional threaded parent.
+  ///
+  /// Text-only, option-free messages keep using the cheaper
+  /// `send_chat_message` path in [ChatService], so the common case keeps its
+  /// offline outbox. Anything with a priority, an acknowledgment requirement
+  /// or an attachment must go through `send_rich_message`, because that is the
+  /// only RPC that writes `message_attachments` rows and the
+  /// `requires_ack`/`priority` columns inside the same transaction as the
+  /// message itself.
+  ///
+  /// The RPC is SECURITY DEFINER on the server, so a caller cannot escalate
+  /// `requires_ack` onto somebody else's behalf, and RLS still decides which
+  /// context the message may be posted into.
+  Future<void> sendRichMessage({
+    required String contextType,
+    String? contextId,
+    String body = '',
+    String? priority,
+    bool requiresAck = false,
+    List<Map<String, dynamic>> files = const [],
+    List<String>? mentionIds,
+    String? parentMessageId,
+  }) async {
+    await _callRpcCandidates(['send_rich_message'], {
+      'p_message_type': contextType,
+      'p_context_id': contextId,
+      'p_body': body,
+      'p_priority': (priority == null || priority == 'normal') ? null : priority,
+      'p_requires_ack': requiresAck,
+      'p_files': files.isEmpty ? null : files,
+      'p_mention_ids': (mentionIds == null || mentionIds.isEmpty)
+          ? null
+          : mentionIds,
+      'p_parent_message_id': parentMessageId,
+    });
+  }
+
+  /// Acknowledgement rows for the given messages.
+  ///
+  /// `chat_message_acks` is RLS-scoped to the caller's own rows plus the
+  /// aggregate counts the sender is entitled to see, so this is safe to call
+  /// for any conversation the user can already open.
+  Future<List<Map<String, dynamic>>> acksFor(List<String> messageIds) async {
+    if (messageIds.isEmpty) return const [];
+    return _rows(
+      await SupabaseService.client
+          .from('chat_message_acks')
+          .select('*')
+          .inFilter('message_id', messageIds),
+    );
+  }
+
+  /// True when [messageId] carries a mandatory-acknowledgment flag.
+  ///
+  /// PostgREST returns the column as a bool on Postgres and occasionally as the
+  /// string `"true"` through a view, so both spellings are accepted.
+  static bool messageRequiresAck(Map<String, dynamic> message) =>
+      message['requires_ack'] == true || message['requires_ack'] == 'true';
+
+  /// `priority` normalised to one of `normal`, `high`, `urgent`.
+  static String messagePriority(Map<String, dynamic> message) {
+    final raw = '${message['priority'] ?? 'normal'}'.trim().toLowerCase();
+    return switch (raw) {
+      'urgent' || 'critical' => 'urgent',
+      'high' || 'important' => 'high',
+      _ => 'normal',
+    };
+  }
+
+  /// True when the signed-in user still owes an acknowledgment for [message].
+  ///
+  /// Mirrors `myAckRequired` in the web `DirectTab`: the message must be
+  /// flagged `requires_ack`, and no `chat_message_acks` row for this user may
+  /// already carry `status = 'acknowledged'`.
+  static bool ackRequired(
+    Map<String, dynamic> message,
+    List<Map<String, dynamic>> acks,
+    String myUserId,
+  ) {
+    if (!messageRequiresAck(message) || myUserId.isEmpty) return false;
+    if ('${message['sender_id'] ?? ''}' == myUserId) return false;
+    return !acks.any(
+      (a) =>
+          '${a['user_id'] ?? ''}' == myUserId &&
+          '${a['status'] ?? ''}' == 'acknowledged',
+    );
+  }
+
+  /// Every `requires_ack` message the caller has read access to that they have
+  /// not acknowledged yet, newest first.
+  ///
+  /// RLS already limits `chat_messages` to conversations the caller belongs to,
+  /// so this cannot leak messages from other teams; the client-side subtraction
+  /// of [acksFor] is exactly what the web `DirectTab` does, and it keeps the
+  /// mandatory-ack gate working on backends that have not yet shipped a
+  /// dedicated `list_pending_message_acks` RPC.
+  ///
+  /// The result is capped at [limit] rows on purpose: the blocking dialog only
+  /// ever shows the oldest outstanding item, and a hard bound stops a long
+  /// history of unacknowledged broadcasts from turning into a slow query.
+  Future<({List<Map<String, dynamic>> pending, List<Map<String, dynamic>> acks})>
+  pendingMessageAcks({int limit = 50}) async {
+    final empty = <Map<String, dynamic>>[];
+    final me = SupabaseService.client.auth.currentUser?.id;
+    if (me == null || me.isEmpty) return (pending: empty, acks: empty);
+    final List<Map<String, dynamic>> rows = _rows(
+      await SupabaseService.client
+          .from('chat_messages')
+          .select('*')
+          .eq('requires_ack', true)
+          .neq('sender_id', me)
+          .order('created_at', ascending: false)
+          .limit(limit),
+    );
+    if (rows.isEmpty) return (pending: empty, acks: empty);
+    final List<Map<String, dynamic>> acks = await acksFor([
+      for (final r in rows) '${r['id'] ?? ''}',
+    ]);
+    final List<Map<String, dynamic>> pending = rows
+        .where((r) => ackRequired(r, acks, me))
+        .toList(growable: false);
+    return (pending: pending, acks: acks);
+  }
+
   Future<void> reportMessage(
     String messageId,
     String reason, {

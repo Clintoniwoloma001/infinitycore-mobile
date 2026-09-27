@@ -27,9 +27,25 @@ class AppRoles {
   static const staff = 'staff';
   static const customer = 'customer';
 
+  // Executive viewer family (Phase 70). These three share ONE read-only
+  // executive access profile, exactly as they do on the web
+  // (src/constants/roles.js EXECUTIVE_VIEWER_ROLES). They are gated through
+  // [isExecutiveViewer] rather than being checked role-by-role at each call
+  // site, so no surface can forget one of them.
+  static const director = 'director';
+  static const chairman = 'chairman';
+  static const mdCeo = 'md_ceo';
+
+  /// True for the roles that share the read-only executive workspace.
+  static bool isExecutiveViewer(String role) =>
+      role == director || role == chairman || role == mdCeo;
+
   static const hierarchy = <String, int>{
     superAdmin: 100,
     admin: 90,
+    mdCeo: 98,
+    chairman: 96,
+    director: 95,
     headOfEBusiness: 80,
     headOfOperations: 79,
     headOfBusiness: 78,
@@ -90,11 +106,32 @@ class AppRoles {
         return 'Staff';
       case customer:
         return 'Customer';
+      case director:
+        return 'Director';
+      case chairman:
+        return 'Chairman';
+      case mdCeo:
+        return 'MD/CEO';
       default:
         return role.isEmpty ? 'Staff' : role;
     }
   }
 }
+
+/// The route an executive-viewer role lands on, and the one Super Admin can
+/// also open. Kept here (not inline in the router) so the routing rule is
+/// unit-testable on its own.
+const String executiveRoute = '/director';
+
+/// True when this role gets the executive workspace as its HOME experience.
+///
+/// Super Admin is deliberately EXCLUDED. It keeps its own dashboard and may
+/// also open the executive workspace, exactly as the web does.
+bool usesExecutiveWorkspace(String role) => AppRoles.isExecutiveViewer(role);
+
+/// True when this role may open the executive workspace at all.
+bool canOpenExecutiveWorkspace(String role) =>
+    AppRoles.isExecutiveViewer(role) || role == AppRoles.superAdmin;
 
 /// Permission keys copied verbatim from the web permission system so screen
 /// visibility matches the platform's own role matrix.

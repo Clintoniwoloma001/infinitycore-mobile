@@ -17,7 +17,43 @@
     <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
     <uses-permission android:name="android.permission.USE_FINGERPRINT"/>
     <uses-permission android:name="android.permission.CAMERA"/>
+    <!-- Voice notes in Messages, and SARA's wake word / spoken replies. Both
+         features degrade gracefully when this is declined: the composer falls
+         back to a text field and SARA's mic button explains why it is off. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <!-- Reading an image the user picked for an attachment. Scoped storage means
+         no storage permission is needed from API 33; the READ_MEDIA_IMAGES
+         declaration only applies to the picker on older releases. -->
+    <uses-permission
+        android:name="android.permission.READ_MEDIA_IMAGES"
+        android:minSdkVersion="33"/>
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
+    <uses-feature android:name="android.hardware.microphone" android:required="false"/>
+
+    <!-- ==================================================================
+         BACKGROUND LOCATION HEARTBEAT (Phase 70)
+         ==================================================================
+         The ~30-minute workforce heartbeat. Separate from attendance: the
+         heartbeat NEVER gates clock-in or clock-out (see
+         resolve_employee_location() in Postgres), it only records where the
+         device was, when.
+
+         ACCESS_BACKGROUND_LOCATION is only meaningful once the app is not in
+         the foreground, so it is requested separately, at runtime, and only
+         after the user has been told why. The two foreground-service
+         permissions are what keep the heartbeat alive under Android's
+         background execution limits (API 29+).                        -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
+
+    <!-- Keeps the device awake for a short location fix so a heartbeat is not
+         recorded as a stale or partial fix. -->
+    <uses-permission android:name="android.permission.RECEIVE_WAKE_LOCK"/>
+
     <application
         android:label="InfinityCore"
         android:name="${applicationName}"

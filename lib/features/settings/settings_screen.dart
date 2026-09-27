@@ -51,9 +51,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   'Dark mode',
                   style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                 ),
-                subtitle: const Text(
+                subtitle: Text(
                   'Follows your device theme',
-                  style: TextStyle(fontSize: 11, color: Colors.black54),
+                  style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context)),
                 ),
                 value: _dark,
                 activeTrackColor: AppColors.green,
@@ -74,9 +74,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   'Clear cached data',
                   style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                 ),
-                subtitle: const Text(
+                subtitle: Text(
                   'Instagram-like local cache is minimal',
-                  style: TextStyle(fontSize: 11, color: Colors.black54),
+                  style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context)),
                 ),
                 trailing: const Icon(
                   Icons.cleaning_services_outlined,
@@ -93,7 +93,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 subtitle: Text(
                   _version,
-                  style: const TextStyle(fontSize: 11, color: Colors.black54),
+                  style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context)),
                 ),
                 trailing: const Icon(Icons.info_outline, size: 18),
               ),
@@ -116,7 +116,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 subtitle: Text(
                   domain,
-                  style: const TextStyle(fontSize: 11, color: Colors.black54),
+                  style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context)),
                 ),
               ),
             ],

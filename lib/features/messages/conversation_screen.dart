@@ -8,9 +8,11 @@ import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/common.dart';
 import 'communication_service.dart';
 import 'create_sheets.dart';
+import 'message_composer.dart';
 import 'message_ui.dart';
 import 'messaging_hub.dart';
 import 'messaging_service.dart';
+import 'urgent_ack_service.dart';
 
 /// What kind of conversation lives at `/messages/…`.
 enum ConversationKind { thread, channel, group }
@@ -40,7 +42,6 @@ class _ConversationScreenState extends State<ConversationScreen> {
   String _description = '';
   bool _loading = true;
   String? _error;
-  bool _sending = false;
   RealtimeChannel? _sub;
 
   String get _me => SupabaseService.client.auth.currentUser?.id ?? '';
@@ -216,24 +217,61 @@ class _ConversationScreenState extends State<ConversationScreen> {
     });
   }
 
-  Future<void> _send() async {
-    final body = _controller.text.trim();
-    if (body.isEmpty || _sending) return;
-    _controller.clear();
-    setState(() => _sending = true);
-    try {
-      if (_isGroup) {
-        await MessagingService.instance.sendGroupMessage(widget.id, body);
-      } else {
-        await MessagingService.instance.sendChannelMessage(widget.id, body);
+  /// Sends a composed message.
+  ///
+  /// Text-only keeps the existing narrow RPC (`send_group_message` /
+  /// `send_channel_message`); anything with a priority, an acknowledgment
+  /// requirement or an attachment goes through `send_rich_message`, which is
+  /// the only path that writes `message_attachments` rows and opens the
+  /// per-recipient acknowledgment obligations atomically with the message.
+  Future<void> _send(MessageDraft draft) async {
+    if (!draft.isRich) {
+      try {
+        if (_isGroup) {
+          await MessagingService.instance.sendGroupMessage(
+            widget.id,
+            draft.body,
+          );
+        } else {
+          await MessagingService.instance.sendChannelMessage(
+            widget.id,
+            draft.body,
+          );
+        }
+        return;
+      } catch (_) {
+        if (mounted) {
+          showSnack('Message could not be sent. Try again.', isError: true);
+        }
+        rethrow;
       }
-    } catch (_) {
-      if (mounted) {
-        showSnack('Message could not be sent. Try again.', isError: true);
-      }
-    } finally {
-      if (mounted) setState(() => _sending = false);
     }
+
+    try {
+      await CommunicationService.instance.sendRichMessage(
+        contextType: _conversationType,
+        contextId: widget.id,
+        body: draft.body,
+        priority: draft.priority,
+        requiresAck: draft.requiresAck,
+        files: draft.rpcFiles,
+      );
+    } catch (e) {
+      if (mounted) {
+        showSnack(
+          CommunicationService.friendlyError(
+            e,
+            fallback: 'That message could not be sent. Your text is still here — try again.',
+          ),
+          isError: true,
+        );
+      }
+      rethrow;
+    }
+    // Re-read so the bubble picks up the server-assigned id, the priority
+    // columns and the attachment rows in one pass.
+    await _load();
+    await UrgentAckService.instance.refresh();
   }
 
   Future<void> _shareInvite() async {
@@ -269,7 +307,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
                 _description,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 11, color: Colors.black54),
+                style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context)),
               ),
           ],
         ),
@@ -542,44 +580,12 @@ class _ConversationScreenState extends State<ConversationScreen> {
     );
   }
 
-  Widget _inputBar(BuildContext context) {
-    return Container(
-      color: Colors.white,
-      padding: EdgeInsets.fromLTRB(
-        12,
-        8,
-        12,
-        8 + MediaQuery.of(context).padding.bottom,
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: _controller,
-              textInputAction: TextInputAction.send,
-              onSubmitted: (_) => _send(),
-              minLines: 1,
-              maxLines: 4,
-              decoration: InputDecoration(
-                hintText: 'Message $_title…',
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          IconButton.filled(
-            onPressed: _sending ? null : _send,
-            style: IconButton.styleFrom(
-              backgroundColor: AppColors.green,
-              disabledBackgroundColor: AppColors.green.withValues(alpha: 0.4),
-            ),
-            icon: const Icon(Icons.arrow_right, color: Colors.white),
-          ),
-        ],
-      ),
-    );
-  }
+  /// The composer. `MessageComposer` owns its own text field, attachment strip
+  /// and recorder, so this screen no longer keeps a controller or send flag.
+  Widget _inputBar(BuildContext context) => MessageComposer(
+    contextType: _conversationType,
+    contextId: widget.id,
+    hintText: 'Message $_title…',
+    onSend: _send,
+  );
 }

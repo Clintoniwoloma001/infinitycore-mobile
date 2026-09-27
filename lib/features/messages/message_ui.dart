@@ -6,6 +6,7 @@ import '../../core/theme/app_theme.dart';
 import '../../shared/utils/formatters.dart';
 import '../../shared/widgets/common.dart';
 import 'communication_service.dart';
+import 'voice_service.dart';
 
 /// Compact relative timestamp used across conversation rows and bubbles.
 String relativeTime(String? iso) {
@@ -234,6 +235,12 @@ class _MessageAttachmentTileState extends State<MessageAttachmentTile> {
 
   @override
   Widget build(BuildContext context) {
+    // Voice notes get a dedicated inline player; everything else keeps the
+    // tap-to-open-external behaviour, which is the right default for documents
+    // the OS already knows how to render.
+    if (widget.attachment['attachment_type'] == 'voice_note') {
+      return VoiceNoteTile(attachment: widget.attachment);
+    }
     if (_isImage) {
       return GestureDetector(
         onTap: _open,
@@ -303,7 +310,7 @@ class _MessageAttachmentTileState extends State<MessageAttachmentTile> {
 }
 
 /// A single message bubble with priority/official header, attachments,
-/// reactions and a delivery indicator.
+/// reactions, an inline voice-note player and a delivery indicator.
 ///
 /// Long-press opens [onLongPress] (the action sheet). This is shared by the
 /// direct-chat and group/channel conversation screens so both render messages
@@ -319,6 +326,9 @@ class MessageBubble extends StatelessWidget {
     required this.myUserId,
     required this.onLongPress,
     required this.onToggleReaction,
+    this.acks = const [],
+    this.needsMyAck = false,
+    this.onAcknowledge,
   });
 
   final Map<String, dynamic> message;
@@ -330,10 +340,23 @@ class MessageBubble extends StatelessWidget {
   final VoidCallback onLongPress;
   final void Function(String emoji, bool mine) onToggleReaction;
 
+  /// `chat_message_acks` rows for this message, used for the "N acknowledged"
+  /// tally the sender sees.
+  final List<Map<String, dynamic>> acks;
+
+  /// True when this message demands the local user's acknowledgment and they
+  /// have not given it yet. The button is rendered inline so the user can
+  /// comply without the full-screen gate (the gate still owns app-level
+  /// enforcement).
+  final bool needsMyAck;
+
+  final VoidCallback? onAcknowledge;
+
   @override
   Widget build(BuildContext context) {
     final body = '${message['body'] ?? ''}';
-    final priority = '${message['priority'] ?? 'normal'}';
+    final priority = CommunicationService.messagePriority(message);
+    final requiresAck = CommunicationService.messageRequiresAck(message);
     final official =
         message['is_official'] == true || message['is_official'] == 'true';
     final createdAt = '${message['created_at'] ?? ''}';
@@ -382,7 +405,11 @@ class MessageBubble extends StatelessWidget {
                   ),
                   border: isMine
                       ? null
-                      : Border.all(color: AppColors.border(context)),
+                      : Border.all(
+                          color: priority == 'urgent'
+                              ? AppColors.rose.withValues(alpha: 0.55)
+                              : AppColors.border(context),
+                        ),
                 ),
                 child: Column(
                   crossAxisAlignment: isMine
@@ -393,29 +420,19 @@ class MessageBubble extends StatelessWidget {
                     if (official || priority == 'urgent' || priority == 'high')
                       Padding(
                         padding: const EdgeInsets.only(bottom: 4),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              official
-                                  ? Icons.verified_outlined
-                                  : Icons.warning_amber_rounded,
-                              size: 12,
-                              color: isMine ? Colors.white70 : AppColors.amber,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              official ? 'OFFICIAL' : priority.toUpperCase(),
-                              style: TextStyle(
-                                fontSize: 9,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 0.5,
-                                color: isMine
-                                    ? Colors.white70
-                                    : AppColors.amber,
-                              ),
-                            ),
-                          ],
+                        child: _PriorityHeader(
+                          label: official ? 'OFFICIAL' : priority.toUpperCase(),
+                          color: priority == 'urgent'
+                              ? AppColors.rose
+                              : AppColors.warn(context),
+                          onMine: isMine,
+                        ),
+                      ),
+                    if (needsMyAck)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: _InlineAckPrompt(
+                          onAcknowledge: onAcknowledge,
                         ),
                       ),
                     for (final f in attachments)
@@ -433,6 +450,11 @@ class MessageBubble extends StatelessWidget {
                               ? Colors.white
                               : AppColors.textPrimary(context),
                         ),
+                      ),
+                    if (requiresAck && acks.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 5),
+                        child: _AckTally(count: acks.length, onMine: isMine),
                       ),
                     const SizedBox(height: 3),
                     Row(
@@ -476,6 +498,226 @@ class MessageBubble extends StatelessWidget {
     );
   }
 }
+
+/// `OFFICIAL` / `URGENT` / `IMPORTANT` strip at the top of a bubble.
+class _PriorityHeader extends StatelessWidget {
+  const _PriorityHeader({
+    required this.label,
+    required this.color,
+    required this.onMine,
+  });
+
+  final String label;
+  final Color color;
+
+  /// On an outgoing bubble the header sits on a filled brand background, so
+  /// the tint has to be a light overlay rather than the alert colour itself.
+  final bool onMine;
+
+  @override
+  Widget build(BuildContext context) {
+    final effective = onMine ? Colors.white70 : color;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          label == 'OFFICIAL'
+              ? Icons.verified_outlined
+              : Icons.warning_amber_rounded,
+          size: 12,
+          color: effective,
+        ),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 9,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.5,
+            color: effective,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Inline "acknowledge" button shown on a message that demands the local
+/// user's confirmation.
+///
+/// The full-screen gate is the enforcement mechanism; this is the fast path so
+/// a user reading the thread can comply without waiting for the queue refresh.
+/// Both write through the same `acknowledge_chat_message` RPC.
+class _InlineAckPrompt extends StatelessWidget {
+  const _InlineAckPrompt({required this.onAcknowledge});
+
+  final VoidCallback? onAcknowledge;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: FilledButton.icon(
+        onPressed: onAcknowledge,
+        style: FilledButton.styleFrom(
+          backgroundColor: AppColors.rose,
+          foregroundColor: Colors.white,
+          visualDensity: VisualDensity.compact,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        ),
+        icon: const Icon(Icons.done_all_rounded, size: 15),
+        label: const Text(
+          'Acknowledge',
+          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+        ),
+      ),
+    );
+  }
+}
+
+/// "N acknowledged" tally, shown on a message that required confirmation.
+class _AckTally extends StatelessWidget {
+  const _AckTally({required this.count, required this.onMine});
+
+  final int count;
+  final bool onMine;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = onMine ? Colors.white70 : AppColors.textTertiary(context);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.how_to_reg_outlined, size: 12),
+        const SizedBox(width: 4),
+        Text(
+          count == 1 ? '1 acknowledged' : '$count acknowledged',
+          style: TextStyle(fontSize: 10, color: color),
+        ),
+      ],
+    );
+  }
+}
+
+/// Inline player for a `voice_note` attachment.
+///
+/// Voice notes live in the private `documents` bucket, so playback mints a
+/// short-lived signed URL on first tap. One player is shared per screen
+/// ([voicePlayer]) so starting a second note stops the first instead of playing
+/// both at once.
+class VoiceNoteTile extends StatelessWidget {
+  const VoiceNoteTile({super.key, required this.attachment});
+
+  final Map<String, dynamic> attachment;
+
+  String get _id =>
+      '${attachment['id'] ?? attachment['file_path'] ?? ''}';
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: voicePlayer,
+      builder: (context, _) => _build(context),
+    );
+  }
+
+  Widget _build(BuildContext context) {
+    final accent = AppColors.orange;
+    final active = voicePlayer.isActiveId(_id);
+    final playing = voicePlayer.isPlayingId(_id);
+    final loading = voicePlayer.isLoading && active;
+    final seconds = int.tryParse('${attachment['duration_ms'] ?? ''}') ?? 0;
+    final total = seconds > 0
+        ? Duration(seconds: seconds)
+        : voicePlayer.duration;
+    final position = active ? voicePlayer.position : Duration.zero;
+
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 250),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.brandTint(context, accent),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          InkWell(
+            onTap: loading ? null : () => voicePlayer.toggle(attachment),
+            borderRadius: BorderRadius.circular(999),
+            child: Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
+              child: loading
+                  ? const Padding(
+                      padding: EdgeInsets.all(9),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : Icon(
+                      playing
+                          ? Icons.pause_rounded
+                          : Icons.play_arrow_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Voice note',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary(context),
+                  ),
+                ),
+                const SizedBox(height: 3),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(999),
+                  child: LinearProgressIndicator(
+                    value: active ? voicePlayer.progress : 0,
+                    minHeight: 3,
+                    backgroundColor: AppColors.border(context),
+                    valueColor: AlwaysStoppedAnimation<Color>(accent),
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  _label(active, total, position),
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: AppColors.textTertiary(context),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _label(bool active, Duration total, Duration position) {
+    if (total <= Duration.zero) return 'Tap to play';
+    if (!active) return formatVoiceDuration(total);
+    return '${formatVoiceDuration(position)} / ${formatVoiceDuration(total)}';
+  }
+}
+
+/// App-scoped voice-note player.
+///
+/// Playback stops when the conversation screen is disposed, so audio never
+/// keeps playing behind another screen.
+final VoicePlaybackController voicePlayer = VoicePlaybackController();
 
 /// Lazily signed image preview. The URL is minted only when the tile builds,
 /// so a long history does not create a signed URL per attachment up front.

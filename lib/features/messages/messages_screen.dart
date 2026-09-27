@@ -190,9 +190,12 @@ class _MessagesScreenState extends State<MessagesScreen>
                     Tab(text: 'Channels'),
                     Tab(text: 'Groups'),
                   ],
-                  labelColor: AppColors.green,
-                  unselectedLabelColor: Colors.black54,
-                  indicatorColor: AppColors.green,
+                  // Theme-aware: the tab strip was the worst offender in dark
+                  // mode — a hard-coded near-black unselected label on a dark
+                  // scaffold was effectively invisible.
+                  labelColor: AppColors.accent(context),
+                  unselectedLabelColor: AppColors.textSecondary(context),
+                  indicatorColor: AppColors.accent(context),
                   indicatorSize: TabBarIndicatorSize.tab,
                 ),
                 Expanded(
@@ -392,7 +395,7 @@ class _ThreadList extends StatelessWidget {
             right: 16,
             bottom: 20,
             child: FloatingActionButton.small(
-              backgroundColor: AppColors.green,
+              backgroundColor: AppColors.accent(context),
               foregroundColor: Colors.white,
               heroTag: 'new_chat',
               onPressed: onNewChat,
@@ -420,7 +423,7 @@ class _ThreadList extends StatelessWidget {
                 unread,
               );
               return Material(
-                color: Colors.white,
+                color: AppColors.surface(context),
                 borderRadius: BorderRadius.circular(14),
                 child: InkWell(
                   onTap: () => onOpenThread(t.id),
@@ -456,7 +459,7 @@ class _ThreadList extends StatelessWidget {
                                     fontWeight: unreadCount > 0
                                         ? FontWeight.w600
                                         : FontWeight.w400,
-                                    color: Colors.black54,
+                                    color: AppColors.textSecondary(context),
                                   ),
                                 ),
                             ],
@@ -470,7 +473,7 @@ class _ThreadList extends StatelessWidget {
                               vertical: 3,
                             ),
                             decoration: BoxDecoration(
-                              color: AppColors.green,
+                              color: AppColors.accent(context),
                               borderRadius: BorderRadius.circular(999),
                             ),
                             child: Text(
@@ -487,9 +490,9 @@ class _ThreadList extends StatelessWidget {
                             padding: const EdgeInsets.only(left: 8),
                             child: Text(
                               relativeTime(t.lastMessageAt),
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 10,
-                                color: Colors.black38,
+                                color: AppColors.iconMuted(context),
                               ),
                             ),
                           ),
@@ -505,7 +508,7 @@ class _ThreadList extends StatelessWidget {
           right: 16,
           bottom: 20,
           child: FloatingActionButton.small(
-            backgroundColor: AppColors.green,
+            backgroundColor: AppColors.accent(context),
             foregroundColor: Colors.white,
             heroTag: 'new_chat',
             onPressed: onNewChat,
@@ -575,9 +578,9 @@ class _ChannelList extends StatelessWidget {
                           ? _UnreadBadge(count: unreadCount)
                           : Text(
                               Fmt.titleCase('${c['channel_type'] ?? 'team'}'),
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 10,
-                                color: Colors.black45,
+                                color: AppColors.textTertiary(context),
                               ),
                             ),
                       onTap: () => onOpenChannel(id, name),
@@ -589,7 +592,7 @@ class _ChannelList extends StatelessWidget {
           right: 16,
           bottom: 20,
           child: FloatingActionButton.small(
-            backgroundColor: AppColors.green,
+            backgroundColor: AppColors.accent(context),
             foregroundColor: Colors.white,
             heroTag: 'new_channel',
             onPressed: onCreate,
@@ -669,7 +672,7 @@ class _GroupList extends StatelessWidget {
           right: 16,
           bottom: 20,
           child: FloatingActionButton.small(
-            backgroundColor: AppColors.green,
+            backgroundColor: AppColors.accent(context),
             foregroundColor: Colors.white,
             heroTag: 'new_group',
             onPressed: onCreate,
@@ -692,7 +695,7 @@ class _UnreadBadge extends StatelessWidget {
       margin: const EdgeInsets.only(right: 6),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: AppColors.green,
+        color: AppColors.accent(context),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
@@ -764,9 +767,9 @@ class _ConversationTile extends StatelessWidget {
                         subtitle,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: Colors.black54,
+                          color: AppColors.textSecondary(context),
                         ),
                       ),
                   ],
@@ -774,7 +777,11 @@ class _ConversationTile extends StatelessWidget {
               ),
               ?trailing,
               const SizedBox(width: 4),
-              const Icon(Icons.chevron_right, size: 18, color: Colors.black26),
+              Icon(
+                Icons.chevron_right,
+                size: 18,
+                color: AppColors.iconMuted(context),
+              ),
             ],
           ),
         ),

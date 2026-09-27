@@ -9,6 +9,8 @@ import '../attendance/attendance_screen.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../leave/leave_requests_screen.dart';
 import '../messages/messages_screen.dart';
+import '../messages/urgent_ack_service.dart';
+import '../sara/sara_mark.dart';
 import 'app_menu.dart';
 
 class _TabDef {
@@ -131,10 +133,11 @@ class _HomeShellState extends State<HomeShell> {
       // SARA stays one tap away from every tab as a chat bubble.
       floatingActionButton: FloatingActionButton(
         onPressed: () => context.push('/sara'),
-        backgroundColor: AppColors.accent(context),
-        foregroundColor: Colors.white,
+        backgroundColor: AppColors.brandTint(context, AppColors.orange),
+        foregroundColor: AppColors.accent(context),
         tooltip: 'Ask SARA',
-        child: const Icon(Icons.chat_bubble_outline),
+        elevation: 2,
+        child: const SaraMark(size: 26),
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,
@@ -144,15 +147,43 @@ class _HomeShellState extends State<HomeShell> {
         destinations: [
           for (final t in tabs)
             NavigationDestination(
-              icon: Icon(t.icon),
-              selectedIcon: Icon(
-                t.selectedIcon,
-                color: AppColors.accent(context),
+              // A pending mandatory acknowledgment is a compliance obligation,
+              // not a nicety, so it gets a persistent dot on the tab rather than
+              // only living inside the Messages screen the user may not open.
+              icon: _badgeFor(
+                t.label,
+                Icon(t.icon),
+                t.label == 'Messages',
+              ),
+              selectedIcon: _badgeFor(
+                t.label,
+                Icon(
+                  t.selectedIcon,
+                  color: AppColors.accent(context),
+                ),
+                t.label == 'Messages',
               ),
               label: t.label,
             ),
         ],
       ),
+    );
+  }
+
+  /// Wraps a navigation icon with the outstanding-acknowledgment dot when the
+  /// destination is Messages and the user owes a confirmation.
+  static Widget _badgeFor(String label, Widget icon, bool isMessages) {
+    if (!isMessages) return icon;
+    return ValueListenableBuilder<List<PendingAck>>(
+      valueListenable: UrgentAckService.instance.pending,
+      builder: (context, items, child) => items.isEmpty
+          ? child!
+          : Badge.count(
+              count: items.length,
+              backgroundColor: AppColors.rose,
+              child: child,
+            ),
+      child: icon,
     );
   }
 }

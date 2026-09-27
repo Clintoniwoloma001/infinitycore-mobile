@@ -91,7 +91,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                 filled: true,
                 fillColor: Colors.white,
                 isDense: true,
-                hintStyle: const TextStyle(fontSize: 13, color: Colors.black38),
+                hintStyle: TextStyle(fontSize: 13, color: AppColors.textTertiary(context)),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: const BorderSide(color: Color(0xFFE8EDF4)),
@@ -177,9 +177,9 @@ class _EmployeeTile extends StatelessWidget {
                       '$position · $department',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: Colors.black54,
+                        color: AppColors.textSecondary(context),
                       ),
                     ),
                     Text(

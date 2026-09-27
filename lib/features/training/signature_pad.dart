@@ -125,12 +125,15 @@ class SignaturePadState extends State<SignaturePad> {
           ),
         ),
         if (_strokes.isEmpty)
-          const Positioned.fill(
+          Positioned.fill(
             child: IgnorePointer(
               child: Center(
                 child: Text(
                   'Sign here',
-                  style: TextStyle(color: Colors.black26, fontSize: 15),
+                  style: const TextStyle(
+                    color: Color(0xFF6B7280),
+                    fontSize: 15,
+                  ),
                 ),
               ),
             ),

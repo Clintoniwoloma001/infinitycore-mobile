@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../diagnostics/auth_trace.dart';
+import '../security/role_guard.dart';
 import '../services/auth_service.dart';
 import 'auth_gate.dart';
 import '../../features/auth/activation_screen.dart';
@@ -13,6 +14,7 @@ import '../../features/auth/splash_screen.dart';
 import '../../features/attendance/attendance_management_screen.dart';
 import '../../features/attendance/public_terminal_screen.dart';
 import '../../features/dashboard/home_shell.dart';
+import '../../features/director/director_shell.dart';
 import '../../features/messages/announcements_screen.dart';
 import '../../features/messages/chat_screen.dart';
 import '../../features/messages/comm_admin_screen.dart';
@@ -49,6 +51,9 @@ final GoRouter appRouter = GoRouter(
       ),
     ),
     GoRoute(path: '/home', builder: (_, _) => const HomeShell()),
+    // Executive workspace. Reachable by the director family and by Super Admin;
+    // every other role is redirected away by the auth gate before it mounts.
+    GoRoute(path: executiveRoute, builder: (_, _) => const DirectorShell()),
     GoRoute(
       path: '/attendance-management',
       builder: (_, _) => const AttendanceManagementScreen(),

@@ -29,11 +29,22 @@
 		<key>NSLocationWhenInUseUsageDescription</key>
 		<string>InfinityCore uses your location to verify you are at an approved branch when you clock in or out.</string>
 		<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-		<string>InfinityCore uses your location to verify you are at an approved branch when you clock in or out.</string>
+		<string>InfinityCore uses your location during authorized attendance and tracking periods to verify attendance locations and support workforce operations. Tracking runs only while you are signed in and tracking is switched on, and you can turn it off at any time in Settings.</string>
+		<key>UIBackgroundModes</key>
+		<array>
+				<string>location</string>
+				<string>fetch</string>
+		</array>
+		<key>NSPhotoLibraryUsageDescription</key>
+		<string>InfinityCore needs access to your photos only when you pick one to attach to a message.</string>
 		<key>NSFaceIDUsageDescription</key>
 		<string>InfinityCore uses Face ID / Touch ID to secure attendance actions.</string>
 		<key>NSCameraUsageDescription</key>
-		<string>InfinityCore uses the camera to scan attendance terminal QR codes.</string>
+		<string>InfinityCore uses the camera to scan attendance terminal QR codes and to attach photos to messages.</string>
+		<key>NSMicrophoneUsageDescription</key>
+		<string>InfinityCore uses the microphone to record voice notes in Messages and to listen for the SARA wake word.</string>
+		<key>NSSpeechRecognitionUsageDescription</key>
+		<string>InfinityCore converts your speech to text so you can talk to SARA instead of typing.</string>
 		<key>UIApplicationSceneManifest</key>
 		<dict>
 			<key>UIApplicationSupportsMultipleScenes</key>

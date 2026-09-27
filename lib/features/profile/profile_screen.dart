@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import 'dart:io';
+
+import 'package:image_picker/image_picker.dart';
+
 import '../../core/security/role_guard.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/biometrics.dart';
 import '../../core/services/device_identity.dart';
 import '../../core/services/employee_photo.dart';
+import '../../core/services/location_heartbeat.dart';
 import '../../core/services/mobile_session_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/theme_controller.dart';
@@ -13,6 +18,10 @@ import '../../shared/models/models.dart';
 import '../../shared/utils/formatters.dart';
 import '../../shared/widgets/common.dart';
 import '../attendance/attendance_service.dart';
+import 'personal_details_sheet.dart';
+import 'profile_service.dart';
+import 'location_tracking_sheet.dart';
+import 'staff_id_card.dart';
 
 /// Employee + account screen. Rendered inside the home shell as the Profile
 /// tab; the router also mounts it standalone behind a scaffold.
@@ -25,9 +34,11 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   EmployeeRef? _employee;
+  PersonalProfile? _personal;
   String? _photoUrl;
   int? _phoneYears;
   bool _signingOut = false;
+  bool _photoBusy = false;
   List<SupervisorRef> _supervisors = const [];
 
   @override
@@ -55,6 +66,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (employee != null) {
       photo = await _photoFor(employee.id);
     }
+    // The full record carries the personal and staff-card fields that
+    // `EmployeeRef` does not model. It comes from the same SECURITY DEFINER RPC
+    // the web profile uses, so both platforms read one source of truth.
+    PersonalProfile? personal;
+    try {
+      personal = await ProfileService.instance.load();
+      photo ??= await _photoFor(personal.employeeId);
+    } catch (e) {
+      debugPrint('[ProfileScreen] personal profile unavailable: $e');
+    }
     List<SupervisorRef> supervisors = const [];
     if (employee != null) {
       supervisors = await AttendanceService.instance
@@ -64,6 +85,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (mounted) {
       setState(() {
         _employee = employee;
+        _personal = personal;
         _photoUrl = photo;
         _phoneYears = employee?.joinedYear;
         _supervisors = supervisors;
@@ -73,6 +95,178 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<String?> _photoFor(String employeeId) =>
       EmployeePhoto.signedUrlFor(employeeId);
+
+  /// Picks a photo, uploads it, and refreshes the avatar.
+  ///
+  /// The upload writes to the same `documents` bucket path and metadata row the
+  /// web `uploadProfilePicture` uses, so a photo set here shows up on the web
+  /// profile (and the other way round) with no extra sync step.
+  Future<void> _changePhoto(ImageSource source) async {
+    if (_photoBusy) return;
+    final employeeId = _personal?.employeeId ?? _employee?.id ?? '';
+    if (employeeId.isEmpty) {
+      _showError('No employee record is linked to this account yet.');
+      return;
+    }
+    setState(() => _photoBusy = true);
+    try {
+      final picked = await ImagePicker().pickImage(
+        source: source,
+        imageQuality: 88,
+        maxWidth: 1600,
+      );
+      if (picked == null) return;
+      final url = await ProfileService.instance.uploadProfilePhoto(
+        employeeId: employeeId,
+        file: File(picked.path),
+      );
+      if (!mounted) return;
+      setState(() => _photoUrl = url);
+      _showMessage('Your profile photo has been updated.');
+    } catch (e) {
+      if (mounted) _showError('$e');
+    } finally {
+      if (mounted) setState(() => _photoBusy = false);
+    }
+  }
+
+  Future<void> _removePhoto() async {
+    final employeeId = _personal?.employeeId ?? _employee?.id ?? '';
+    if (employeeId.isEmpty || _photoBusy) return;
+    setState(() => _photoBusy = true);
+    try {
+      await ProfileService.instance.removeProfilePhoto(employeeId);
+      if (!mounted) return;
+      setState(() => _photoUrl = null);
+      _showMessage('Your profile photo has been removed.');
+    } catch (e) {
+      if (mounted) _showError('$e');
+    } finally {
+      if (mounted) setState(() => _photoBusy = false);
+    }
+  }
+
+  void _openPhotoSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheet) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('Take a photo'),
+              onTap: () {
+                Navigator.of(sheet).pop();
+                _changePhoto(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Choose from gallery'),
+              onTap: () {
+                Navigator.of(sheet).pop();
+                _changePhoto(ImageSource.gallery);
+              },
+            ),
+            if ((_photoUrl ?? '').isNotEmpty)
+              ListTile(
+                leading: const Icon(Icons.delete_outline),
+                title: const Text('Remove photo'),
+                onTap: () {
+                  Navigator.of(sheet).pop();
+                  _removePhoto();
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openStaffCard() async {
+    var personal = _personal;
+    if (personal == null) {
+      _showError('Your employee record is not available yet.');
+      return;
+    }
+    // Assign the number on first open, exactly as the web card does. The RPC
+    // is idempotent, so this is safe to call every time.
+    if (!personal.hasStaffNumber) {
+      setState(() => _photoBusy = true);
+      try {
+        await ProfileService.instance.ensureEmployeeNumber(
+          personal.employeeId,
+        );
+        if (mounted) await _load();
+        personal = _personal;
+      } catch (e) {
+        if (mounted) {
+          setState(() => _photoBusy = false);
+          _showError('$e');
+        }
+        return;
+      }
+      if (mounted) setState(() => _photoBusy = false);
+    }
+    if (personal == null || !mounted) return;
+    await showStaffIdCard(context, profile: personal, photoUrl: _photoUrl);
+  }
+
+  /// Location tracking consent. Reached from the profile so the employee can
+  /// see exactly what is collected and turn it off at any time.
+  Widget _locationTrackingCard() {
+    final hb = LocationHeartbeat.instance;
+    return SectionCard(
+      title: 'Location tracking',
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Text(
+            LocationHeartbeat.purposeMessage,
+            style: const TextStyle(fontSize: 11.5, height: 1.35),
+          ),
+        ),
+        ValueListenableBuilder<HeartbeatStatus>(
+          valueListenable: hb.status,
+          builder: (_, status, _) => Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Text(
+              status.summary,
+              style: TextStyle(
+                fontSize: 11,
+                color: AppColors.textSecondary(context),
+              ),
+            ),
+          ),
+        ),
+        OutlinedButton.icon(
+          onPressed: () => LocationTrackingSheet.show(context),
+          icon: const Icon(Icons.my_location, size: 16),
+          label: Text(hb.isRunning ? 'Tracking options' : 'Review & enable'),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _openPersonalDetails() async {
+    final personal = _personal;
+    if (personal == null) {
+      _showError('Your employee record is not available yet.');
+      return;
+    }
+    final saved = await showPersonalDetailsSheet(
+      context,
+      profile: personal,
+    );
+    if (saved == true) {
+      // Re-read rather than patching locally: the RPC may normalise a value
+      // (a date cast, a trimmed string) and the web view should match.
+      await _load();
+      if (mounted) _showMessage('Your details have been saved.');
+    }
+  }
 
   Future<void> _signOut() async {
     setState(() => _signingOut = true);
@@ -161,6 +355,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 12),
           if (_employee != null) _employeeCard(_employee!),
           const SizedBox(height: 12),
+          _locationTrackingCard(),
+          if (_personal != null) _personalCard(_personal!),
+          const SizedBox(height: 12),
           const _AppearanceSection(),
           const SizedBox(height: 12),
           SectionCard(
@@ -244,7 +441,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Column(
           children: [
             _avatar(name),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
+            if (_personal?.hasStaffNumber == true) ...[
+              Text(
+                'Employee Number: ${_personal!.staffNumber}',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary(context),
+                ),
+              ),
+              const SizedBox(height: 2),
+            ],
             Text(
               name,
               textAlign: TextAlign.center,
@@ -270,6 +478,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 StatusBadge(label: status, color: statusColor),
               ],
             ),
+            const SizedBox(height: 14),
+            // Two primary profile actions, matching the web header's photo and
+            // staff-card affordances.
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _photoBusy ? null : _openPhotoSheet,
+                    icon: _photoBusy
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.photo_camera_outlined, size: 18),
+                    label: Text(
+                      (_photoUrl ?? '').isEmpty ? 'Add photo' : 'Change photo',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: _personal == null ? null : _openStaffCard,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.accent(context),
+                    ),
+                    icon: const Icon(Icons.badge_outlined, size: 18),
+                    label: const Text('My Staff ID Card'),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -278,19 +519,126 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _avatar(String name) {
     final photo = _photoUrl;
-    if (photo == null || photo.isEmpty) {
-      return AvatarCircle(name: name, size: 80);
-    }
-    return ClipOval(
-      child: Image.network(
-        photo,
-        width: 80,
-        height: 80,
-        fit: BoxFit.cover,
-        errorBuilder: (_, _, _) => AvatarCircle(name: name, size: 80),
+    final avatar = photo == null || photo.isEmpty
+        ? AvatarCircle(name: name, size: 80)
+        : ClipOval(
+            child: Image.network(
+              photo,
+              width: 80,
+              height: 80,
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => AvatarCircle(name: name, size: 80),
+            ),
+          );
+    if (_personal == null) return avatar;
+    // Tapping the avatar is the most discoverable way to set a photo, and it
+    // costs nothing to wire to the same sheet the button opens.
+    return GestureDetector(
+      onTap: _photoBusy ? null : _openPhotoSheet,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          avatar,
+          Positioned(
+            right: -2,
+            bottom: -2,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: AppColors.accent(context),
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.surface(context), width: 2),
+              ),
+              child: const Icon(
+                Icons.photo_camera_outlined,
+                size: 12,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
+
+  /// Completeness of the self-service personal details, with the summary rows
+  /// the web profile shows under "Personal Information".
+  Widget _personalCard(PersonalProfile p) {
+    final row = p.row;
+    String at(String key) => '${row[key] ?? ''}'.trim();
+    final pct = (p.personalCompleteness * 100).round();
+    return SectionCard(
+      title: 'Personal details',
+      trailing: TextButton(
+        onPressed: _openPersonalDetails,
+        child: const Text('Edit'),
+      ),
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(999),
+          child: LinearProgressIndicator(
+            value: p.personalCompleteness,
+            minHeight: 6,
+            backgroundColor: AppColors.border(context),
+            valueColor: AlwaysStoppedAnimation<Color>(
+              pct >= 80 ? AppColors.accent(context) : AppColors.warn(context),
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          pct >= 100
+              ? 'All personal details are complete.'
+              : '$pct% complete — add the rest so HR has everything on file.',
+          style: TextStyle(
+            fontSize: 11,
+            color: AppColors.textSecondary(context),
+          ),
+        ),
+        const Divider(height: 20),
+        InfoRow(label: 'Date of birth', value: _pretty(at('date_of_birth'))),
+        InfoRow(label: 'Sex', value: _pretty(at('sex'))),
+        InfoRow(label: 'Marital status', value: _pretty(at('marital_status'))),
+        InfoRow(label: 'Nationality', value: _pretty(at('nationality'))),
+        InfoRow(label: 'State of origin', value: _pretty(at('state_of_origin'))),
+        InfoRow(label: 'LGA', value: _pretty(at('lga'))),
+        InfoRow(label: 'Town / City', value: _pretty(at('town'))),
+        InfoRow(
+          label: 'Residential address',
+          value: _pretty(at('residential_address')),
+        ),
+        if (at('spouse_name').isNotEmpty || at('spouse_phone').isNotEmpty) ...[
+          const Divider(height: 20),
+          const Text(
+            'Spouse',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+          ),
+          InfoRow(label: 'Name', value: _pretty(at('spouse_name'))),
+          InfoRow(label: 'Occupation', value: _pretty(at('spouse_occupation'))),
+          InfoRow(label: 'Phone', value: _pretty(at('spouse_phone'))),
+        ],
+        if (at('emergency_contact_name').isNotEmpty ||
+            at('emergency_contact_phone').isNotEmpty) ...[
+          const Divider(height: 20),
+          const Text(
+            'Emergency contact',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+          ),
+          InfoRow(
+            label: 'Name',
+            value: _pretty(at('emergency_contact_name')),
+          ),
+          InfoRow(
+            label: 'Phone',
+            value: _pretty(at('emergency_contact_phone')),
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// `—` for a blank value so the card never shows an empty row label.
+  String _pretty(String v) => v.isEmpty ? '—' : Fmt.titleCase(v);
 
   Widget _employeeCard(EmployeeRef e) {
     return SectionCard(

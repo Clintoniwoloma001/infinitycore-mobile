@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'app/infinity_core_app.dart';
 import 'core/config/env.dart';
+import 'core/services/location_heartbeat.dart';
 import 'core/services/notification_badge.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/reminder_service.dart';
@@ -44,6 +47,11 @@ Future<void> main() async {
   NotificationBadge.instance.start();
 
   await ThemeController.instance.load();
+
+  // Resume background location tracking only if the employee previously gave
+  // consent on this device. Non-blocking, and it re-checks the session first so
+  // a signed-out device never records coordinates.
+  unawaited(LocationHeartbeat.instance.restoreIfEnabled());
 
   runApp(const InfinityCoreApp());
 }

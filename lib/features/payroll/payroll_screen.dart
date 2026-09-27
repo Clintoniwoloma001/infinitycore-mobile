@@ -133,9 +133,9 @@ class _PayslipCard extends StatelessWidget {
                       ),
                       Text(
                         period,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: Colors.black54,
+                          color: AppColors.textSecondary(context),
                         ),
                       ),
                     ],
@@ -150,12 +150,12 @@ class _PayslipCard extends StatelessWidget {
             const SizedBox(height: 12),
             Row(
               children: [
-                Expanded(child: _kv('Net pay', net)),
+                Expanded(child: _kv(context, 'Net pay', net)),
                 if (record['gross_pay'] != null)
-                  Expanded(child: _kv('Gross', _money(record['gross_pay']))),
+                  Expanded(child: _kv(context, 'Gross', _money(record['gross_pay']))),
                 if (record['deductions'] != null)
                   Expanded(
-                    child: _kv('Deductions', _money(record['deductions'])),
+                    child: _kv(context, 'Deductions', _money(record['deductions'])),
                   ),
               ],
             ),
@@ -163,7 +163,7 @@ class _PayslipCard extends StatelessWidget {
               const SizedBox(height: 10),
               Text(
                 'Employee: ${record['employee_number']}',
-                style: const TextStyle(fontSize: 11, color: Colors.black38),
+                style: TextStyle(fontSize: 11, color: AppColors.textTertiary(context)),
               ),
             ],
           ],
@@ -172,13 +172,13 @@ class _PayslipCard extends StatelessWidget {
     );
   }
 
-  Widget _kv(String label, String value) {
+  Widget _kv(BuildContext context, String label, String value) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
-          style: const TextStyle(fontSize: 11, color: Colors.black45),
+          style: TextStyle(fontSize: 11, color: AppColors.textTertiary(context)),
         ),
         Text(
           value,

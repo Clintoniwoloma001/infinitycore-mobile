@@ -444,12 +444,9 @@ class _PublicAttendanceTerminalScreenState
     final locationValid = _locationCheck?['valid'] == true;
     final locationName = '${_locationCheck?['actual_location_name'] ?? ''}';
 
-    return Container(
+    return LightPanel(
       padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-      ),
+      radius: 18,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -507,13 +504,11 @@ class _PublicAttendanceTerminalScreenState
           ),
           if (publicMode) ...[
             const SizedBox(height: 12),
-            Container(
+            LightPanel(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-              ),
+              color: const Color(0xFFF8FAFC),
+              radius: 12,
+              border: const Color(0xFFE2E8F0),
               child: Row(
                 children: [
                   Icon(
@@ -527,7 +522,7 @@ class _PublicAttendanceTerminalScreenState
                         ? AppColors.rose
                         : locationValid
                         ? AppColors.green
-                        : Colors.black45,
+                        : AppColors.textTertiary(context),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -549,7 +544,7 @@ class _PublicAttendanceTerminalScreenState
               const SizedBox(height: 8),
               Text(
                 _distanceNote(),
-                style: const TextStyle(fontSize: 11, color: Colors.black54),
+                style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context)),
               ),
             ],
           ],

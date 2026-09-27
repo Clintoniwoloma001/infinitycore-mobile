@@ -4,6 +4,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../shared/widgets/common.dart';
 import '../dashboard/home_shell.dart';
 import 'attendance_service.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Authenticated entry point to generate a public attendance-terminal QR.
 /// Mirrors the web `TerminalEntry` page: creates a disposable token via
@@ -65,9 +66,9 @@ class _AttendanceTerminalEntryScreenState
                           'Employees without InfinityCore access can scan '
                           'this code to reach the attendance terminal, enter '
                           'their employee number and clock in/out securely.',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: Colors.black54,
+                            color: AppColors.textSecondary(context),
                           ),
                         ),
                         const SizedBox(height: 16),
@@ -95,9 +96,9 @@ class _AttendanceTerminalEntryScreenState
                           child: Text(
                             AttendanceService.instance.terminalUrl(_token!),
                             textAlign: TextAlign.center,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 10,
-                              color: Colors.black45,
+                              color: AppColors.textTertiary(context),
                             ),
                           ),
                         ),

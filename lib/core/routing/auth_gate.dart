@@ -103,6 +103,25 @@ String? redirectDecision(AuthGateState auth, String loc, Uri uri) {
   // Quick-unlock is only meaningful when biometrics are enabled.
   if (loc == '/lock' && !auth.biometricEnabled) return '/home';
 
+  // ---- Executive workspace (Phase 70) -------------------------------------
+  // The director family (Director / Chairman / MD-CEO) uses this as its HOME
+  // experience and never sees the standard staff dashboard. Super Admin keeps
+  // its own experience and can also open the executive workspace.
+  //
+  // Hiding the nav entry is not the control: this redirect runs before the
+  // screen mounts, so deep-linking or editing a route cannot reach executive
+  // data. The authoritative check remains the role gate inside
+  // get_director_executive_snapshot on the server.
+  final onExecutiveRoute = loc == executiveRoute;
+  final wantsExecutiveHome = loc == '/home' && usesExecutiveWorkspace(auth.role);
+
+  if (onExecutiveRoute && !canOpenExecutiveWorkspace(auth.role)) {
+    return '/home';
+  }
+  if (wantsExecutiveHome) {
+    return executiveRoute;
+  }
+
   // Attendance management is role-gated (the server also enforces this).
   if (loc == '/attendance-management' && !auth.canManageAttendanceRole) {
     return '/home';

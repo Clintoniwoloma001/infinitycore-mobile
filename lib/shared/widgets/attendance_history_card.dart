@@ -109,50 +109,314 @@ class _AttendanceHistoryCardState extends State<AttendanceHistoryCard> {
     final present = r.clockIn != null;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+      child: InkWell(
+        // Every row opens the full record: the summary line cannot show the
+        // geofence verdict, the verification method or the coordinates, and
+        // those are exactly what a user needs when a clock-in looks wrong.
+        onTap: () => showAttendanceRecordSheet(context, r),
+        borderRadius: BorderRadius.circular(10),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      Fmt.dateShort(r.attendanceDate),
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary(context),
+                      ),
+                    ),
+                    if (present)
+                      Text(
+                        '${Fmt.clock(r.clockIn)} — ${Fmt.clock(r.clockOut)}',
+                        style: TextStyle(fontSize: 12, color: secondary),
+                      )
+                    else
+                      Text(
+                        Fmt.titleCase(
+                          r.status.isEmpty ? 'absent' : r.status,
+                        ),
+                        style: TextStyle(fontSize: 12, color: secondary),
+                      ),
+                  ],
+                ),
+              ),
+              if (present) ...[
                 Text(
-                  Fmt.dateShort(r.attendanceDate),
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
+                  '${WorkedHours.fromRecord(r).format()}'
+                  '${r.lateMinutes > 0 ? ' · ${Fmt.lateDuration(r.lateMinutes)} late' : ''}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: r.lateMinutes > 0 ? AppColors.amber : secondary,
                   ),
                 ),
-                if (present)
-                  Text(
-                    '${Fmt.clock(r.clockIn)} — ${Fmt.clock(r.clockOut)}',
-                    style: TextStyle(fontSize: 12, color: secondary),
-                  )
-                else
-                  Text(
-                    Fmt.titleCase(r.status.isEmpty ? 'absent' : r.status),
-                    style: TextStyle(fontSize: 12, color: secondary),
+                if (r.lateMinutes > 0) ...[
+                  const SizedBox(width: 4),
+                  const Icon(
+                    Icons.warning_amber_rounded,
+                    size: 14,
+                    color: AppColors.amber,
                   ),
+                ],
               ],
-            ),
-          ),
-          if (present) ...[
-            Text(
-              '${WorkedHours.fromRecord(r).format()}'
-              '${r.lateMinutes > 0 ? ' · ${Fmt.lateDuration(r.lateMinutes)} late' : ''}',
-              style: TextStyle(
-                fontSize: 12,
-                color: r.lateMinutes > 0 ? AppColors.amber : secondary,
-              ),
-            ),
-            if (r.lateMinutes > 0) ...[
-              const SizedBox(width: 4),
-              const Icon(
-                Icons.warning_amber_rounded,
-                size: 14,
-                color: AppColors.amber,
+              Icon(
+                Icons.chevron_right,
+                size: 16,
+                color: AppColors.iconMuted(context),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Full detail for one attendance record.
+///
+/// Everything shown here comes from the stored record, never recomputed: a
+/// client-side recalculation of lateness would disagree with the server's shift
+/// and grace-period configuration, which is the whole reason the value is
+/// persisted alongside the record.
+Future<void> showAttendanceRecordSheet(
+  BuildContext context,
+  AttendanceRecord r,
+) {
+  final worked = WorkedHours.fromRecord(r);
+  return showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (sheetContext) => SafeArea(
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+              child: Text(
+                Fmt.dateShort(r.attendanceDate),
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+              child: Text(
+                Fmt.titleCase(r.status.isEmpty ? 'unknown' : r.status),
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: attendanceStatusColor(context, r),
+                ),
+              ),
+            ),
+            _DetailGroup(
+              children: [
+                _DetailRow(
+                  label: 'Clock in',
+                  value: r.clockIn == null ? '—' : Fmt.clock(r.clockIn),
+                ),
+                _DetailRow(
+                  label: 'Clock out',
+                  value: r.clockOut == null ? '—' : Fmt.clock(r.clockOut),
+                ),
+                _DetailRow(label: 'Hours worked', value: worked.format()),
+                _DetailRow(
+                  label: 'Late',
+                  value: r.lateMinutes > 0
+                      ? Fmt.lateDuration(r.lateMinutes)
+                      : 'On time',
+                  accent: r.lateMinutes > 0 ? AppColors.amber : null,
+                ),
+                _DetailRow(
+                  label: 'Early departure',
+                  value: r.earlyDepartureMinutes > 0
+                      ? Fmt.lateDuration(r.earlyDepartureMinutes)
+                      : 'None',
+                  accent: r.earlyDepartureMinutes > 0
+                      ? AppColors.amber
+                      : null,
+                ),
+                _DetailRow(
+                  label: 'Overtime',
+                  value: r.overtimeMinutes > 0
+                      ? Fmt.lateDuration(r.overtimeMinutes)
+                      : 'None',
+                ),
+              ],
+            ),
+            if (r.source.isNotEmpty ||
+                r.verificationMethod.isNotEmpty ||
+                r.geofenceStatus.isNotEmpty ||
+                r.locationStatus.isNotEmpty) ...[
+              const _DetailHeading('VERIFICATION'),
+              _DetailGroup(
+                children: [
+                  if (r.source.isNotEmpty)
+                    _DetailRow(
+                      label: 'Recorded via',
+                      value: Fmt.titleCase(r.source),
+                    ),
+                  if (r.verificationMethod.isNotEmpty)
+                    _DetailRow(
+                      label: 'Method',
+                      value: Fmt.titleCase(r.verificationMethod),
+                    ),
+                  if (r.geofenceStatus.isNotEmpty)
+                    _DetailRow(
+                      label: 'Geofence',
+                      value: Fmt.titleCase(r.geofenceStatus),
+                      accent: r.geofenceStatus.toLowerCase() == 'inside'
+                          ? null
+                          : AppColors.rose,
+                    ),
+                  if (r.locationStatus.isNotEmpty)
+                    _DetailRow(
+                      label: 'Location',
+                      value: Fmt.titleCase(r.locationStatus),
+                    ),
+                ],
+              ),
+            ],
+            if (r.actualLocationName.isNotEmpty ||
+                r.assignedBranchName.isNotEmpty ||
+                r.clockInDistance != null) ...[
+              const _DetailHeading('LOCATION'),
+              _DetailGroup(
+                children: [
+                  if (r.assignedBranchName.isNotEmpty)
+                    _DetailRow(label: 'Branch', value: r.assignedBranchName),
+                  if (r.actualLocationName.isNotEmpty)
+                    _DetailRow(
+                      label: 'Recorded at',
+                      value: r.actualLocationName,
+                    ),
+                  if (r.clockInDistance != null)
+                    _DetailRow(
+                      label: 'Distance from site',
+                      value: '${r.clockInDistance!.toStringAsFixed(0)} m',
+                      accent: r.clockInDistance! > 100
+                          ? AppColors.amber
+                          : null,
+                    ),
+                  if (r.clockInLat != null && r.clockInLng != null)
+                    _DetailRow(
+                      label: 'Coordinates',
+                      value: '${r.clockInLat!.toStringAsFixed(5)}, '
+                          '${r.clockInLng!.toStringAsFixed(5)}',
+                    ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 16),
           ],
+        ),
+      ),
+    ),
+  );
+}
+
+/// Colour for a record's status, shared by the summary row and the detail sheet
+/// so a day never changes colour between the two views.
+Color attendanceStatusColor(BuildContext context, AttendanceRecord r) {
+  return switch (r.status.toLowerCase()) {
+    'present' || 'on_time' => AppColors.accent(context),
+    'late' => AppColors.amber,
+    'absent' || 'missing' => AppColors.rose,
+    _ => AppColors.textSecondary(context),
+  };
+}
+
+/// Small caps heading used between the sheet's sections.
+class _DetailHeading extends StatelessWidget {
+  const _DetailHeading(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.8,
+          color: AppColors.textTertiary(context),
+        ),
+      ),
+    );
+  }
+}
+
+/// Grouped container for the detail rows so the sheet reads as sections rather
+/// than one long undifferentiated list.
+class _DetailGroup extends StatelessWidget {
+  const _DetailGroup({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    if (children.isEmpty) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.brandTint(context, AppColors.accent(context)),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border(context)),
+      ),
+      child: Column(children: children),
+    );
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({required this.label, required this.value, this.accent});
+
+  final String label;
+  final String value;
+  final Color? accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 9),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 132,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: AppColors.textSecondary(context),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: accent ?? AppColors.textPrimary(context),
+              ),
+            ),
+          ),
         ],
       ),
     );

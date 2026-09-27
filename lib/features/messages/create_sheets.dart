@@ -162,10 +162,10 @@ class _PersonPickerSheetState extends State<_PersonPickerSheet> {
                                   detail,
                                   style: const TextStyle(fontSize: 12),
                                 ),
-                          trailing: const Icon(
+                          trailing: Icon(
                             Icons.chevron_right,
                             size: 18,
-                            color: Colors.black26,
+                            color: AppColors.textTertiary(context),
                           ),
                           onTap: () {
                             Navigator.of(context).pop();
@@ -586,7 +586,7 @@ class _CreateGroupSheetState extends State<_CreateGroupSheet> {
                 children: [
                   Text(
                     '${_selected.length} selected',
-                    style: const TextStyle(fontSize: 11, color: Colors.black54),
+                    style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context)),
                   ),
                   const SizedBox(height: 8),
                   FilledButton(
@@ -804,7 +804,7 @@ class _ConversationInfoSheetState extends State<_ConversationInfoSheet> {
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
                 child: Text(
                   _description,
-                  style: const TextStyle(fontSize: 13, color: Colors.black54),
+                  style: TextStyle(fontSize: 13, color: AppColors.textSecondary(context)),
                 ),
               ),
             Padding(

@@ -131,7 +131,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
                             labelStyle: TextStyle(
                               color: _tab == idx
                                   ? Colors.white
-                                  : Colors.black87,
+                                  : AppColors.textPrimary(context),
                               fontWeight: FontWeight.w600,
                             ),
                             showCheckmark: false,
@@ -200,7 +200,7 @@ class _MyTrainingList extends StatelessWidget {
           final a = assignments[i];
           final sessionRows = _mapRows(a['training_sessions']);
           final s = sessionRows.isEmpty
-              ? const <String, dynamic>{}
+              ? <String, dynamic>{}
               : sessionRows.first;
           final status = '${a['status'] ?? 'assigned'}';
           final done = status == 'completed';
@@ -248,9 +248,9 @@ class _MyTrainingList extends StatelessWidget {
                                     .isEmpty
                                 ? ''
                                 : '${_typeLabel('${s['training_type'] ?? ''}')} · ${Fmt.dateShort('${s['training_date']}')}',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
-                              color: Colors.black54,
+                              color: AppColors.textSecondary(context),
                             ),
                           ),
                         ],
@@ -337,16 +337,17 @@ class _SessionsList extends StatelessWidget {
                   spacing: 6,
                   runSpacing: 4,
                   children: [
-                    _tag(_typeLabel('${s['training_type'] ?? ''}')),
-                    _tag(Fmt.dateShort('${s['training_date']}')),
+                    _tag(context, _typeLabel('${s['training_type'] ?? ''}')),
+                    _tag(context, Fmt.dateShort('${s['training_date']}')),
                     _tag(
+                      context,
                       '${branch ?? s['venue_name'] ?? s['location'] ?? 'All branches'}',
                     ),
                     if (s['delivery_type'] == 'virtual')
-                      _tag('Virtual')
+                      _tag(context, 'Virtual')
                     else
-                      _tag('Physical'),
-                    _tag('${s['duration_minutes'] ?? 0} min'),
+                      _tag(context, 'Physical'),
+                    _tag(context, '${s['duration_minutes'] ?? 0} min'),
                   ],
                 ),
                 if ('${s['description'] ?? ''}'.isNotEmpty) ...[
@@ -355,7 +356,7 @@ class _SessionsList extends StatelessWidget {
                     '${s['description']}',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 12, color: Colors.black54),
+                    style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context)),
                   ),
                 ],
                 if (s['assessment_required'] == true) ...[
@@ -383,7 +384,7 @@ class _SessionsList extends StatelessWidget {
     );
   }
 
-  Widget _tag(String text) => Container(
+  Widget _tag(BuildContext context, String text) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
     decoration: BoxDecoration(
       color: const Color(0xFFF1F5F9),
@@ -391,7 +392,7 @@ class _SessionsList extends StatelessWidget {
     ),
     child: Text(
       text,
-      style: const TextStyle(fontSize: 11, color: Colors.black54),
+      style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context)),
     ),
   );
 }
@@ -881,9 +882,9 @@ class _CreateAllTabState extends State<_CreateAllTab> {
                 ),
                 const SizedBox(height: 14),
                 _participants.isEmpty
-                    ? const Text(
+                    ? Text(
                         'No participants selected yet.',
-                        style: TextStyle(fontSize: 12, color: Colors.black45),
+                        style: TextStyle(fontSize: 12, color: AppColors.textTertiary(context)),
                       )
                     : Wrap(
                         spacing: 6,
@@ -955,9 +956,9 @@ class _CreateAllTabState extends State<_CreateAllTab> {
                     _selectedRoles.isNotEmpty ||
                     (_department ?? '').isNotEmpty) ...[
                   const SizedBox(height: 10),
-                  const Text(
+                  Text(
                     'No employees match the current filters.',
-                    style: TextStyle(fontSize: 12, color: Colors.black45),
+                    style: TextStyle(fontSize: 12, color: AppColors.textTertiary(context)),
                   ),
                 ],
               ],
@@ -1001,10 +1002,10 @@ class _CreateAllTabState extends State<_CreateAllTab> {
                 ),
                 if (_type == 'kss' || _assessment) ...[
                   const SizedBox(height: 4),
-                  const Text(
+                  Text(
                     'KSS question bank — one question per line:\n'
                     'Question | Correct answer | Option 1, Option 2, Option 3',
-                    style: TextStyle(fontSize: 11, color: Colors.black54),
+                    style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context)),
                   ),
                   const SizedBox(height: 8),
                   TextFormField(
@@ -1230,15 +1231,15 @@ class _TrainingAssessmentScreenState extends State<TrainingAssessmentScreen> {
                       ? null
                       : Text(
                           '${_questions.length} questions',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: Colors.black45,
+                            color: AppColors.textTertiary(context),
                           ),
                         ),
                   children: [
-                    const Text(
+                    Text(
                       'Your question set is fixed by HR for this attempt.',
-                      style: TextStyle(fontSize: 12, color: Colors.black54),
+                      style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context)),
                     ),
                     for (final (i, q) in _questions.indexed) ...[
                       const SizedBox(height: 12),
@@ -1348,7 +1349,7 @@ class _QuestionInput extends StatelessWidget {
                             ? Icons.radio_button_checked
                             : Icons.radio_button_off,
                         size: 18,
-                        color: value == '$o' ? AppColors.green : Colors.black38,
+                        color: value == '$o' ? AppColors.green : AppColors.textTertiary(context),
                       ),
                     ],
                   ),

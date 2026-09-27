@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../core/services/auth_service.dart';
 import '../../core/security/role_guard.dart';
@@ -9,7 +8,6 @@ import '../../shared/models/models.dart';
 import '../../shared/utils/formatters.dart';
 import '../../shared/widgets/attendance_history_card.dart';
 import '../../shared/widgets/common.dart';
-import '../messages/messaging_hub.dart';
 import 'dashboard_service.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -107,106 +105,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ],
             const SizedBox(height: 12),
-            _MessagesCard(),
-            const SizedBox(height: 12),
+            // The Messages card that used to live here was removed when
+            // messaging moved onto the bottom navigation bar: it duplicated a
+            // destination the user is already one tap from and pushed the
+            // attendance history below the fold.
             AttendanceHistoryCard(records: snapshot.recentAttendance),
           ],
           const SizedBox(height: 12),
           _SecurityCard(snapshot: snapshot),
         ],
-      ),
-    );
-  }
-}
-
-/// Entry point into Messaging, with a live unread badge sourced from the
-/// messaging hub. Visibility follows the existing `messages` role module, so no
-/// new role logic is introduced.
-class _MessagesCard extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    if (!roleModules(AuthService.instance.role).contains('messages')) {
-      return const SizedBox.shrink();
-    }
-    return Material(
-      color: AppColors.surface(context),
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: () => context.push('/messages'),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: AppColors.accent(context).withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  Icons.inbox_outlined,
-                  size: 20,
-                  color: AppColors.accent(context),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Messages',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textPrimary(context),
-                      ),
-                    ),
-                    Text(
-                      'Chat with colleagues, channels and groups',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary(context),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              ValueListenableBuilder<int>(
-                valueListenable: MessagingHub.instance.unreadTotal,
-                builder: (context, total, _) {
-                  if (total <= 0) {
-                    return const Icon(
-                      Icons.chevron_right,
-                      size: 20,
-                      color: Colors.black26,
-                    );
-                  }
-                  return Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 9,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.accent(context),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      total > 99 ? '99+' : '$total',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }
