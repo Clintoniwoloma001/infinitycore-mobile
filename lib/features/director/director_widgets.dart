@@ -34,7 +34,7 @@ class MetricTile extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.surface(context),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.border(context)),
       ),
@@ -79,8 +79,8 @@ class MetricTile extends StatelessWidget {
                 color: up
                     ? const Color(0xFF047857)
                     : down
-                        ? const Color(0xFFB91C1C)
-                        : AppColors.textSecondary(context),
+                    ? const Color(0xFFB91C1C)
+                    : AppColors.textSecondary(context),
               ),
             ),
         ],
@@ -161,7 +161,7 @@ class SectionHeader extends StatelessWidget {
               ),
             ),
           ),
-            if (trailing case final Widget t) t,
+          if (trailing case final Widget t) t,
         ],
       ),
     );

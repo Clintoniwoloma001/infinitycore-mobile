@@ -89,12 +89,15 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                 hintText: 'Search by name, department or ID…',
                 prefixIcon: const Icon(Icons.search, size: 20),
                 filled: true,
-                fillColor: Colors.white,
+                fillColor: AppColors.surface(context),
                 isDense: true,
-                hintStyle: TextStyle(fontSize: 13, color: AppColors.textTertiary(context)),
+                hintStyle: TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textTertiary(context),
+                ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFFE8EDF4)),
+                  borderSide: BorderSide(color: AppColors.border(context)),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -151,7 +154,9 @@ class _EmployeeTile extends StatelessWidget {
         : (status == 'suspended' ? AppColors.rose : AppColors.amber);
 
     return Material(
-      color: Colors.white,
+      // Theme-aware: a fixed white sheet left a column of bright blocks in
+      // dark mode.
+      color: AppColors.surface(context),
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         onTap: () => context.go('/employees/${employee['id']}'),

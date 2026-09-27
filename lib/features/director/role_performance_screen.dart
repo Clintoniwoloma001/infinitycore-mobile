@@ -51,29 +51,32 @@ class _RolePerformanceScreenState extends State<RolePerformanceScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(_error!, textAlign: TextAlign.center),
-                  ),
-                )
-              : _roles.isEmpty
-                  ? Center(
-                      child: Text(
-                        'No target data recorded for this period.',
-                        style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context)),
-                      ),
-                    )
-                  : RefreshIndicator(
-                      onRefresh: _load,
-                      child: ListView.separated(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _roles.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 8),
-                        itemBuilder: (_, i) =>
-                            _RoleCard(role: _roles[i], onOpen: _openPerson),
-                      ),
-                    ),
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(_error!, textAlign: TextAlign.center),
+              ),
+            )
+          : _roles.isEmpty
+          ? Center(
+              child: Text(
+                'No target data recorded for this period.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary(context),
+                ),
+              ),
+            )
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: ListView.separated(
+                padding: const EdgeInsets.all(16),
+                itemCount: _roles.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 8),
+                itemBuilder: (_, i) =>
+                    _RoleCard(role: _roles[i], onOpen: _openPerson),
+              ),
+            ),
     );
   }
 
@@ -101,14 +104,17 @@ class _RoleCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final assigned = asDouble(role['target'] ?? role['assigned']);
     final actual = asDouble(role['actual'] ?? role['achieved']);
-    final completion = asDouble(role['completion'] ?? role['target_completion']);
-    final remaining =
-        (assigned != null && actual != null) ? assigned - actual : null;
+    final completion = asDouble(
+      role['completion'] ?? role['target_completion'],
+    );
+    final remaining = (assigned != null && actual != null)
+        ? assigned - actual
+        : null;
 
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.surface(context),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.border(context)),
       ),
@@ -120,7 +126,10 @@ class _RoleCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   text(role['role']) ?? text(role['name']) ?? 'Role',
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
               Text(
@@ -143,7 +152,10 @@ class _RoleCard extends StatelessWidget {
               const Text('  ·  ', style: TextStyle(fontSize: 11)),
               Text(
                 'Actual ${compactMoney(actual) ?? '--'}',
-                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ],
           ),
@@ -153,7 +165,10 @@ class _RoleCard extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               'Remaining ${compactMoney(remaining)}',
-              style: TextStyle(fontSize: 9, color: AppColors.textSecondary(context)),
+              style: TextStyle(
+                fontSize: 9,
+                color: AppColors.textSecondary(context),
+              ),
             ),
           ],
           // When the server supplied a person for this role, make it tappable so
@@ -163,7 +178,10 @@ class _RoleCard extends StatelessWidget {
               alignment: Alignment.centerRight,
               child: TextButton(
                 onPressed: () => onOpen(role),
-                child: const Text('View person', style: TextStyle(fontSize: 11)),
+                child: const Text(
+                  'View person',
+                  style: TextStyle(fontSize: 11),
+                ),
               ),
             ),
         ],

@@ -56,10 +56,8 @@ void main() {
           body: Builder(
             builder: (context) => Center(
               child: ElevatedButton(
-                onPressed: () => showPersonalDetailsSheet(
-                  context,
-                  profile: profile,
-                ),
+                onPressed: () =>
+                    showPersonalDetailsSheet(context, profile: profile),
                 child: const Text('open'),
               ),
             ),
@@ -76,13 +74,20 @@ void main() {
       await tester.pumpWidget(host(StaffIdCardSheet(profile: sample)));
       await tester.pump();
 
-      expect(find.text('Staff ID Card'), findsOneWidget);
-      expect(find.text('INFINITYCORE'), findsOneWidget);
-      expect(find.text('Ada Nwosu'), findsOneWidget);
-      expect(find.text('IC-0042'), findsOneWidget);
-      expect(find.text('Ketu'), findsOneWidget);
+      // The green banner label plus the sheet's own heading.
+      expect(find.text('Staff ID Card'), findsNWidgets(2));
+      expect(find.text('Identity & Access'), findsOneWidget);
+      expect(find.text('Ada Nwosu'), findsWidgets);
+      // Front meta grid and the back header both carry the number.
+      expect(find.text('IC-0042'), findsNWidgets(2));
+      expect(find.text('Ketu'), findsNWidgets(2));
       expect(find.text('Branch Manager'), findsOneWidget);
       expect(find.text('Operations'), findsOneWidget);
+      // The web labels the meta grid in upper case.
+      expect(find.text('STAFF ID'), findsOneWidget);
+      expect(find.text('DEPARTMENT'), findsOneWidget);
+      expect(find.text('STATUS'), findsOneWidget);
+      expect(find.text('ACTIVE'), findsOneWidget);
     });
 
     testWidgets('shows the emergency contact number', (tester) async {
@@ -94,9 +99,13 @@ void main() {
     testWidgets('shows the issue and expiry dates', (tester) async {
       await tester.pumpWidget(host(StaffIdCardSheet(profile: sample)));
       await tester.pump();
-      expect(find.text('Issued'), findsOneWidget);
-      expect(find.text('Expires'), findsOneWidget);
+      // The front meta grid renders its labels in upper case...
+      expect(find.text('ISSUE DATE'), findsOneWidget);
+      expect(find.text('EXPIRY DATE'), findsOneWidget);
+      // ...while the back's label/value rows keep web sentence case.
+      expect(find.text('Issued By'), findsOneWidget);
       expect(find.text('Human Resources'), findsOneWidget);
+      expect(find.text('HUMAN RESOURCES'), findsNWidgets(2));
     });
 
     testWidgets('paints in dark mode without overflowing', (tester) async {
@@ -104,7 +113,7 @@ void main() {
         host(StaffIdCardSheet(profile: sample), mode: ThemeMode.dark),
       );
       await tester.pump();
-      expect(find.text('Ada Nwosu'), findsOneWidget);
+      expect(find.text('Ada Nwosu'), findsWidgets);
       expect(tester.takeException(), isNull);
     });
 
@@ -113,11 +122,12 @@ void main() {
       await tester.pumpWidget(host(StaffIdCardSheet(profile: blank)));
       await tester.pump();
 
-      // No crash, and the missing values read as explicit placeholders rather
-      // than blank rows.
-      expect(find.text('Staff member'), findsOneWidget);
-      expect(find.text('Not assigned'), findsOneWidget);
-      expect(find.text('Head Office'), findsOneWidget);
+      // No crash, and the missing values read as the web component's explicit
+      // placeholders rather than blank rows. 'Head Office' appears on both
+      // faces, since the branch is printed on the front grid and the back row.
+      expect(find.text('—'), findsWidgets);
+      expect(find.text('Head Office'), findsNWidgets(2));
+      expect(find.text('Staff'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
@@ -130,7 +140,56 @@ void main() {
       );
       await tester.pumpWidget(host(StaffIdCardSheet(profile: legacy)));
       await tester.pump();
-      expect(find.text('STF-77'), findsOneWidget);
+      expect(find.text('STF-77'), findsNWidgets(2));
+    });
+
+    testWidgets('an expired card is labelled EXPIRED in red', (tester) async {
+      final expired = PersonalProfile(
+        employeeId: 'e',
+        row: const {
+          'full_name': 'Ada',
+          'employee_number': 'IC-9',
+          'staff_id_status': 'expired',
+        },
+      );
+      await tester.pumpWidget(host(StaffIdCardSheet(profile: expired)));
+      await tester.pump();
+      expect(find.text('EXPIRED'), findsWidgets);
+    });
+
+    testWidgets('renders the reverse side, not just the front', (tester) async {
+      await tester.pumpWidget(host(StaffIdCardSheet(profile: sample)));
+      await tester.pump();
+
+      // The back carries the emergency contact and both signature rules, which
+      // is what makes this a two-sided card rather than a name badge.
+      expect(find.text('Emergency Contact'), findsOneWidget);
+      expect(find.text('MANAGEMENT SIGNATURE'), findsOneWidget);
+      expect(find.text('CARD HOLDER SIGNATURE'), findsOneWidget);
+      expect(find.text('Management / HR'), findsOneWidget);
+      expect(find.text('Employee Signature'), findsOneWidget);
+      expect(find.text('This card has no expiry.'), findsNothing);
+    });
+
+    testWidgets('a jsonb branch object renders the name, not raw JSON', (
+      tester,
+    ) async {
+      // `mobile_get_my_employee` returns `branch` as a jsonb object. Printing
+      // that object verbatim put "{id: 017fa140-…}" on the card.
+      final withJsonBranch = PersonalProfile(
+        employeeId: 'e',
+        row: const {
+          'full_name': 'Ada',
+          'employee_number': 'IC-1',
+          'branch': {'id': '017fa140-fc83', 'branch_name': 'Ikeja'},
+        },
+      );
+      await tester.pumpWidget(host(StaffIdCardSheet(profile: withJsonBranch)));
+      await tester.pump();
+
+      expect(find.text('Ikeja'), findsNWidgets(2));
+      // The raw jsonb must never reach the screen.
+      expect(find.textContaining('017fa140'), findsNothing);
     });
   });
 
@@ -155,7 +214,9 @@ void main() {
       expect(find.text('EMERGENCY CONTACT'), findsOneWidget);
     });
 
-    testWidgets('always offers Save, even when nothing changed', (tester) async {
+    testWidgets('always offers Save, even when nothing changed', (
+      tester,
+    ) async {
       await openEditor(tester, sample);
       // The server, not the client, decides what it will accept, so Save is
       // never disabled on the basis of a local completeness guess.

@@ -6,6 +6,7 @@ import '../../core/theme/app_theme.dart';
 import '../../shared/models/models.dart';
 import '../../shared/utils/formatters.dart';
 import '../../shared/widgets/common.dart';
+import '../../shared/widgets/attendance_history_card.dart';
 import 'attendance_service.dart';
 
 /// HR/attendance-management view. Backed by the server-authoritative
@@ -390,113 +391,109 @@ class _AttendanceManagementScreenState
 
     return Card(
       margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                AvatarCircle(name: r.employeeName, size: 38),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        r.employeeName,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
+      // The summary card truncates the location line and never shows the
+      // coordinates, the GPS accuracy or the geofence verdict, so tapping
+      // opens the full record — same affordance as the employee's own history.
+      child: InkWell(
+        onTap: () => showAttendanceManagementSheet(context, r),
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  AvatarCircle(name: r.employeeName, size: 38),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          r.employeeName,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
+                        Text(
+                          [
+                            if (r.employeeNumber.isNotEmpty) r.employeeNumber,
+                            if (r.department.isNotEmpty) r.department,
+                          ].join(' · '),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppColors.textTertiary(context),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (isOpen)
+                    const StatusBadge(label: 'Open', color: AppColors.violet)
+                  else
+                    StatusBadge(label: r.status, color: statusColor),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '${Fmt.dateShort(r.attendanceDate)}'
+                '${r.branchName.isNotEmpty ? ' · ${r.branchName}' : ''}',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary(context),
+                ),
+              ),
+              if (details.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    details.join(' · '),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textPrimary(context),
+                    ),
+                  ),
+                ),
+              if (r.actualLocationName.isNotEmpty ||
+                  r.locationStatus.isNotEmpty ||
+                  r.geofenceStatus.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.gps_fixed,
+                        size: 13,
+                        color: AppColors.iconMuted(context),
                       ),
-                      Text(
-                        [
-                          if (r.employeeNumber.isNotEmpty) r.employeeNumber,
-                          if (r.department.isNotEmpty) r.department,
-                        ].join(' · '),
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: AppColors.textTertiary(context),
+                      const SizedBox(width: 5),
+                      Expanded(
+                        child: Text(
+                          [
+                            if (r.actualLocationName.isNotEmpty)
+                              r.actualLocationName,
+                            if (r.locationStatus.isNotEmpty &&
+                                r.locationStatus != 'inside')
+                              r.locationStatus,
+                            if (r.geofenceStatus.isNotEmpty) r.geofenceStatus,
+                          ].join(' · '),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppColors.textTertiary(context),
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
                   ),
                 ),
-                if (isOpen)
-                  const StatusBadge(label: 'Open', color: AppColors.violet)
-                else
-                  StatusBadge(label: r.status, color: statusColor),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '${Fmt.dateShort(r.attendanceDate)}'
-              '${r.branchName.isNotEmpty ? ' · ${r.branchName}' : ''}',
-              style: TextStyle(
-                fontSize: 12,
-                color: AppColors.textSecondary(context),
-              ),
-            ),
-            if (details.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  details.join(' · '),
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textPrimary(context),
-                  ),
-                ),
-              ),
-            if (r.actualLocationName.isNotEmpty ||
-                r.locationStatus.isNotEmpty ||
-                r.geofenceStatus.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.gps_fixed,
-                      size: 13,
-                      color: AppColors.iconMuted(context),
-                    ),
-                    const SizedBox(width: 5),
-                    Expanded(
-                      child: Text(
-                        [
-                          if (r.actualLocationName.isNotEmpty)
-                            r.actualLocationName,
-                          if (r.locationStatus.isNotEmpty &&
-                              r.locationStatus != 'inside')
-                            r.locationStatus,
-                          if (r.geofenceStatus.isNotEmpty) r.geofenceStatus,
-                        ].join(' · '),
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: AppColors.textTertiary(context),
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
-}
-
-/// Worked-hours for a management row (open sessions fall back to the
-/// server-reported value).
-WorkedHours workedHoursFor(AttendanceManagementRow r) {
-  final end = DateTime.tryParse(r.clockOut ?? '');
-  final start = DateTime.tryParse(r.clockIn ?? '');
-  final worked = end != null && start != null
-      ? end.difference(start).inMinutes / 60.0
-      : r.workHours;
-  return WorkedHours(worked: worked, overtime: 0, allowed: worked);
 }

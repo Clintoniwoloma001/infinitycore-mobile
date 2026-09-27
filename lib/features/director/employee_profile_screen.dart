@@ -44,8 +44,9 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen> {
       _error = null;
     });
     try {
-      final detail =
-          await DirectorService.instance.employeeDetail(widget.employeeId);
+      final detail = await DirectorService.instance.employeeDetail(
+        widget.employeeId,
+      );
       if (!mounted) return;
       setState(() {
         _person = asMap(detail['employee'] ?? detail['person'] ?? detail);
@@ -86,27 +87,24 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen> {
         body: _loading
             ? const Center(child: CircularProgressIndicator())
             : _error != null
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(
-                        _error!,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                    ),
-                  )
-                : TabBarView(
-                    children: [
-                      _OverviewTab(person: _person),
-                      _AttendanceTab(person: _person),
-                      _LeaveTab(leave: _leave),
-                      _PerformanceTab(
-                        kpis: _kpis,
-                        targets: _targets,
-                      ),
-                    ],
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(
+                    _error!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 12),
                   ),
+                ),
+              )
+            : TabBarView(
+                children: [
+                  _OverviewTab(person: _person),
+                  _AttendanceTab(person: _person),
+                  _LeaveTab(leave: _leave),
+                  _PerformanceTab(kpis: _kpis, targets: _targets),
+                ],
+              ),
       ),
     );
   }
@@ -128,8 +126,13 @@ class _OverviewTab extends StatelessWidget {
             margin: const EdgeInsets.only(bottom: 16),
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: AppColors.textPrimary(context),
+              // A surface, not ink. This was `AppColors.textPrimary(context)`,
+              // which is near-black in light mode and near-white in dark mode,
+              // so the panel inverted itself between modes and the white
+              // tenure text vanished on the dark one.
+              color: AppColors.surface(context),
               borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.border(context)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -139,16 +142,16 @@ class _OverviewTab extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 9,
                     letterSpacing: 1,
-                    color: AppColors.textSecondary(context),
+                    color: AppColors.textTertiary(context),
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   tenure,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
-                    color: Colors.white,
+                    color: AppColors.textPrimary(context),
                   ),
                 ),
               ],
@@ -213,7 +216,10 @@ class _LeaveTab extends StatelessWidget {
       return Center(
         child: Text(
           'No leave recorded.',
-          style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context)),
+          style: TextStyle(
+            fontSize: 12,
+            color: AppColors.textSecondary(context),
+          ),
         ),
       );
     }
@@ -240,7 +246,9 @@ class _LeaveTab extends StatelessWidget {
             style: TextStyle(
               fontSize: 9,
               fontWeight: FontWeight.w700,
-              color: approved ? const Color(0xFF047857) : const Color(0xFFB45309),
+              color: approved
+                  ? const Color(0xFF047857)
+                  : const Color(0xFFB45309),
             ),
           ),
         );
@@ -261,7 +269,10 @@ class _PerformanceTab extends StatelessWidget {
       return Center(
         child: Text(
           'No KPI or target data recorded.',
-          style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context)),
+          style: TextStyle(
+            fontSize: 12,
+            color: AppColors.textSecondary(context),
+          ),
         ),
       );
     }
@@ -295,14 +306,15 @@ class _PerformanceTab extends StatelessWidget {
   Widget _targetCard(BuildContext context, Map<String, dynamic> t) {
     final assigned = asDouble(t['target'] ?? t['assigned']);
     final actual = asDouble(t['actual'] ?? t['achieved']);
-    final remaining =
-        (assigned != null && actual != null) ? assigned - actual : null;
+    final remaining = (assigned != null && actual != null)
+        ? assigned - actual
+        : null;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.surface(context),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.border(context)),
       ),
@@ -316,11 +328,17 @@ class _PerformanceTab extends StatelessWidget {
           const SizedBox(height: 6),
           Row(
             children: [
-              Text(compactMoney(assigned) ?? '--', style: const TextStyle(fontSize: 11)),
+              Text(
+                compactMoney(assigned) ?? '--',
+                style: const TextStyle(fontSize: 11),
+              ),
               const Text('  /  ', style: TextStyle(fontSize: 11)),
               Text(
                 compactMoney(actual) ?? '--',
-                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               const Spacer(),
               Text(
@@ -339,7 +357,10 @@ class _PerformanceTab extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               'Remaining ${compactMoney(remaining)}',
-              style: TextStyle(fontSize: 9, color: AppColors.textSecondary(context)),
+              style: TextStyle(
+                fontSize: 9,
+                color: AppColors.textSecondary(context),
+              ),
             ),
           ],
         ],
@@ -366,7 +387,10 @@ class _Row extends StatelessWidget {
             width: 96,
             child: Text(
               label,
-              style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context)),
+              style: TextStyle(
+                fontSize: 11,
+                color: AppColors.textSecondary(context),
+              ),
             ),
           ),
           Expanded(
@@ -380,4 +404,3 @@ class _Row extends StatelessWidget {
     );
   }
 }
-

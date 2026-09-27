@@ -163,11 +163,9 @@ class _MessagesScreenState extends State<MessagesScreen>
     ];
     return Scaffold(
       // See `embedded`: inside HomeShell the shell owns the app bar.
-      appBar: widget.embedded ? null : shellAppBar(
-        context,
-        title: 'Messages',
-        actionsExtra: actions,
-      ),
+      appBar: widget.embedded
+          ? null
+          : shellAppBar(context, title: 'Messages', actionsExtra: actions),
       body: _loading
           ? const PageLoadingView(label: 'Loading messages…')
           : _error != null
@@ -179,7 +177,10 @@ class _MessagesScreenState extends State<MessagesScreen>
                     alignment: Alignment.centerRight,
                     child: Padding(
                       padding: const EdgeInsets.only(right: 4),
-                      child: Row(mainAxisSize: MainAxisSize.min, children: actions),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: actions,
+                      ),
                     ),
                   ),
                 _SearchBar(onChanged: (v) => setState(() => _query = v)),
@@ -730,7 +731,10 @@ class _ConversationTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
+      // Theme-aware: this was a hard-coded white sheet, so every channel /
+      // group / chat row stayed bright white in dark mode with a white title
+      // on top of it — the washed-out, unreadable list in the bug report.
+      color: AppColors.surface(context),
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         onTap: onTap,

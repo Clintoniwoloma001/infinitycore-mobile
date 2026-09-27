@@ -140,10 +140,14 @@ class _DirectorHomeScreenState extends State<DirectorHomeScreen> {
           const SizedBox(height: 16),
           _DrillRow(
             onLeave: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const LeaveOverviewScreen()),
+              MaterialPageRoute<void>(
+                builder: (_) => const LeaveOverviewScreen(),
+              ),
             ),
             onRoles: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const RolePerformanceScreen()),
+              MaterialPageRoute<void>(
+                builder: (_) => const RolePerformanceScreen(),
+              ),
             ),
             onAttendance: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
@@ -261,7 +265,7 @@ class _DepartmentCarousel extends StatelessWidget {
               width: 168,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: AppColors.surface(context),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: AppColors.border(context)),
               ),
@@ -378,9 +382,10 @@ class _LeaderList extends StatelessWidget {
                 ),
               ),
               subtitle: Text(
-                [text(p['position']), text(p['branch_name'])]
-                    .whereType<String>()
-                    .join(' · '),
+                [
+                  text(p['position']),
+                  text(p['branch_name']),
+                ].whereType<String>().join(' · '),
                 style: const TextStyle(fontSize: 10),
               ),
               trailing: Text(
@@ -413,32 +418,32 @@ class _DrillRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Widget tile(IconData icon, String label, VoidCallback onTap) => Expanded(
-          child: InkWell(
-            onTap: onTap,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          decoration: BoxDecoration(
+            color: AppColors.surface(context),
             borderRadius: BorderRadius.circular(12),
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.border(context)),
-              ),
-              child: Column(
-                children: [
-                  Icon(icon, size: 18, color: const Color(0xFF009944)),
-                  const SizedBox(height: 6),
-                  Text(
-                    label,
-                    style: const TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            border: Border.all(color: AppColors.border(context)),
           ),
-        );
+          child: Column(
+            children: [
+              Icon(icon, size: 18, color: const Color(0xFF009944)),
+              const SizedBox(height: 6),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
 
     return Row(
       children: [
@@ -471,7 +476,10 @@ class _ErrorView extends StatelessWidget {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12, color: AppColors.textTertiary(context)),
+              style: TextStyle(
+                fontSize: 12,
+                color: AppColors.textTertiary(context),
+              ),
             ),
             const SizedBox(height: 12),
             OutlinedButton(onPressed: onRetry, child: const Text('Try again')),

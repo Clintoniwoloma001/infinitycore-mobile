@@ -58,8 +58,30 @@ class PersonalProfile {
   String get phone => _s('phone');
   String get department => _s('department');
   String get position => _s('position');
-  String get branch => _s('branch');
   String get employmentStatus => _s('employment_status');
+
+  /// The assigned branch's display name.
+  ///
+  /// `mobile_get_my_employee` returns `branch` as a *jsonb object*
+  /// (`{id, branch_name, latitude, …}`), not a string — see the RPC in
+  /// `infinitycore-sara/supabase/migrations/20260922000006_mobile_device_sessions.sql`.
+  /// Interpolating that object directly printed raw JSON on the ID card
+  /// ("{id: 017fa140-fc83-473a…}"), so the name is unwrapped here and the
+  /// raw object is used only as a last resort.
+  String get branch {
+    final raw = row['branch'];
+    if (raw is Map) {
+      for (final key in const ['branch_name', 'name', 'branch']) {
+        final v = '${raw[key] ?? ''}'.trim();
+        if (v.isNotEmpty) return v;
+      }
+      return '';
+    }
+    // Some rows carry a plain `branch_id`/`branch` string instead.
+    final plain = _s('branch');
+    if (!plain.startsWith('{')) return plain;
+    return '';
+  }
 
   /// `employee_number` is the canonical staff identifier; `staff_id` and
   /// `employee_code` are older fallbacks the web card still honours, so the
@@ -271,11 +293,13 @@ class ProfileService {
         '${DateTime.now().millisecondsSinceEpoch}-photo.$ext';
 
     try {
-      await _db.storage.from('documents').uploadBinary(
-        objectPath,
-        await file.readAsBytes(),
-        fileOptions: const FileOptions(upsert: false),
-      );
+      await _db.storage
+          .from('documents')
+          .uploadBinary(
+            objectPath,
+            await file.readAsBytes(),
+            fileOptions: const FileOptions(upsert: false),
+          );
       await _db.from('documents').insert({
         'entity_type': 'employee',
         'entity_id': employeeId,

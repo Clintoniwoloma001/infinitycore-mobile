@@ -171,3 +171,19 @@ class WorkedHours {
     return '${h}h ${m}m';
   }
 }
+
+/// Worked hours for a row of the HR/attendance-management feed.
+///
+/// The HR RPC does not expose the overtime columns, so only the worked total is
+/// reported here. It lives beside [WorkedHours] rather than in the management
+/// screen so the shared detail sheet can reuse it without a feature import.
+WorkedHours workedHoursFor(AttendanceManagementRow row) {
+  final end = DateTime.tryParse(row.clockOut ?? '');
+  final start = DateTime.tryParse(row.clockIn ?? '');
+  // An open session has no clock_out yet, so the elapsed span would be
+  // meaningless; fall back to the server-reported figure in that case.
+  final worked = end != null && start != null
+      ? end.difference(start).inMinutes / 60.0
+      : row.workHours;
+  return WorkedHours(worked: worked, overtime: 0, allowed: worked);
+}

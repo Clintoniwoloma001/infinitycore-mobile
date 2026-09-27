@@ -138,9 +138,7 @@ class _AttendanceHistoryCardState extends State<AttendanceHistoryCard> {
                       )
                     else
                       Text(
-                        Fmt.titleCase(
-                          r.status.isEmpty ? 'absent' : r.status,
-                        ),
+                        Fmt.titleCase(r.status.isEmpty ? 'absent' : r.status),
                         style: TextStyle(fontSize: 12, color: secondary),
                       ),
                   ],
@@ -242,9 +240,7 @@ Future<void> showAttendanceRecordSheet(
                   value: r.earlyDepartureMinutes > 0
                       ? Fmt.lateDuration(r.earlyDepartureMinutes)
                       : 'None',
-                  accent: r.earlyDepartureMinutes > 0
-                      ? AppColors.amber
-                      : null,
+                  accent: r.earlyDepartureMinutes > 0 ? AppColors.amber : null,
                 ),
                 _DetailRow(
                   label: 'Overtime',
@@ -304,14 +300,13 @@ Future<void> showAttendanceRecordSheet(
                     _DetailRow(
                       label: 'Distance from site',
                       value: '${r.clockInDistance!.toStringAsFixed(0)} m',
-                      accent: r.clockInDistance! > 100
-                          ? AppColors.amber
-                          : null,
+                      accent: r.clockInDistance! > 100 ? AppColors.amber : null,
                     ),
                   if (r.clockInLat != null && r.clockInLng != null)
                     _DetailRow(
                       label: 'Coordinates',
-                      value: '${r.clockInLat!.toStringAsFixed(5)}, '
+                      value:
+                          '${r.clockInLat!.toStringAsFixed(5)}, '
                           '${r.clockInLng!.toStringAsFixed(5)}',
                     ),
                 ],
@@ -322,6 +317,154 @@ Future<void> showAttendanceRecordSheet(
         ),
       ),
     ),
+  );
+}
+
+/// Full detail for one row of the HR/attendance-management feed.
+///
+/// This is a separate sheet from [showAttendanceRecordSheet] because it is fed
+/// by `mobile_attendance_summary`, whose `returns table` exposes a narrower
+/// column set than the employee's own history feed — there is no
+/// `verification_method`, `source`, `overtime_minutes`, `early_departure_minutes`
+/// or `clock_in_distance` on that RPC. Only fields the RPC actually returns are
+/// rendered; nothing here is inferred, and no absent column is shown as a
+/// misleading "—" that implies the data was recorded and lost.
+Future<void> showAttendanceManagementSheet(
+  BuildContext context,
+  AttendanceManagementRow r,
+) {
+  final worked = workedHoursFor(r);
+  final lat = r.clockInLat;
+  final lng = r.clockInLng;
+
+  return showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (sheetContext) {
+      final colorScheme = Theme.of(sheetContext).colorScheme;
+      return SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+                child: Text(
+                  r.employeeName.isEmpty ? 'Attendance record' : r.employeeName,
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                child: Text(
+                  '${Fmt.dateShort(r.attendanceDate)}'
+                  '${r.employeeNumber.isNotEmpty ? ' · ${r.employeeNumber}' : ''}',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              if (r.isCurrentlyOpen)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: StatusBadge(
+                    label: 'Still clocked in',
+                    color: AppColors.violet,
+                  ),
+                ),
+              const _DetailHeading('TIMES'),
+              _DetailGroup(
+                children: [
+                  _DetailRow(
+                    label: 'Status',
+                    value: Fmt.titleCase(
+                      r.status.isEmpty ? 'unknown' : r.status,
+                    ),
+                  ),
+                  _DetailRow(
+                    label: 'Clock in',
+                    value: r.clockIn == null ? '—' : Fmt.clock(r.clockIn),
+                  ),
+                  _DetailRow(
+                    label: 'Clock out',
+                    value: r.clockOut == null ? '—' : Fmt.clock(r.clockOut),
+                  ),
+                  _DetailRow(label: 'Hours worked', value: worked.format()),
+                  _DetailRow(
+                    label: 'Late',
+                    value: r.lateMinutes > 0
+                        ? Fmt.lateDuration(r.lateMinutes)
+                        : (r.lateStatus.isEmpty
+                              ? 'On time'
+                              : Fmt.titleCase(r.lateStatus)),
+                    accent: r.lateMinutes > 0 ? AppColors.amber : null,
+                  ),
+                ],
+              ),
+              if (r.locationStatus.isNotEmpty ||
+                  r.geofenceStatus.isNotEmpty) ...[
+                const _DetailHeading('VERIFICATION'),
+                _DetailGroup(
+                  children: [
+                    if (r.geofenceStatus.isNotEmpty)
+                      _DetailRow(
+                        label: 'Geofence',
+                        value: Fmt.titleCase(r.geofenceStatus),
+                        accent: r.geofenceStatus.toLowerCase() == 'inside'
+                            ? null
+                            : AppColors.rose,
+                      ),
+                    if (r.locationStatus.isNotEmpty)
+                      _DetailRow(
+                        label: 'Location',
+                        value: Fmt.titleCase(r.locationStatus),
+                      ),
+                  ],
+                ),
+              ],
+              if (r.branchName.isNotEmpty ||
+                  r.actualLocationName.isNotEmpty ||
+                  r.department.isNotEmpty ||
+                  lat != null ||
+                  lng != null) ...[
+                const _DetailHeading('LOCATION'),
+                _DetailGroup(
+                  children: [
+                    if (r.department.isNotEmpty)
+                      _DetailRow(label: 'Department', value: r.department),
+                    if (r.branchName.isNotEmpty)
+                      _DetailRow(label: 'Branch', value: r.branchName),
+                    if (r.actualLocationName.isNotEmpty)
+                      _DetailRow(
+                        label: 'Recorded at',
+                        value: r.actualLocationName,
+                      ),
+                    if (r.clockInAccuracy != null)
+                      _DetailRow(
+                        label: 'GPS accuracy',
+                        value: '±${r.clockInAccuracy!.toStringAsFixed(0)} m',
+                      ),
+                    if (lat != null && lng != null)
+                      _DetailRow(
+                        label: 'Coordinates',
+                        value:
+                            '${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}',
+                      ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 16),
+            ],
+          ),
+        ),
+      );
+    },
   );
 }
 

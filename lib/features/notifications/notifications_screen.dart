@@ -148,7 +148,12 @@ class _NotificationTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: notification.read ? Colors.white : const Color(0xFFF0FDF4),
+      // Theme-aware: a hard-coded white sheet (and the pale green "unread"
+      // tint) stayed white in dark mode, so a read notification rendered as
+      // dark text on a white block punched out of the dark list.
+      color: notification.read
+          ? AppColors.surface(context)
+          : AppColors.brandTint(context, AppColors.accent(context)),
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         onTap: onTap,
@@ -164,8 +169,8 @@ class _NotificationTile extends StatelessWidget {
                 decoration: BoxDecoration(
                   color:
                       (notification.read
-                              ? const Color(0xFFE2E8F0)
-                              : AppColors.green)
+                              ? AppColors.iconMuted(context)
+                              : AppColors.accent(context))
                           .withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(10),
                 ),
@@ -189,7 +194,7 @@ class _NotificationTile extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                         color: notification.read
                             ? AppColors.textSecondary(context)
-                            : Colors.black,
+                            : AppColors.textPrimary(context),
                       ),
                     ),
                     const SizedBox(height: 2),
