@@ -42,6 +42,22 @@ class StaffIdCardSheet extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Explicit close control. The sheet is dismissible by swipe and by
+            // the system back button, but neither is discoverable while looking
+            // at a card, so the affordance is shown rather than assumed.
+            Align(
+              alignment: Alignment.centerLeft,
+              child: IconButton(
+                onPressed: () => Navigator.of(context).maybePop(),
+                icon: const Icon(Icons.arrow_back),
+                tooltip: 'Close',
+                visualDensity: VisualDensity.compact,
+                style: IconButton.styleFrom(
+                  foregroundColor: AppColors.textPrimary(context),
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
             Row(
               children: [
                 const Expanded(

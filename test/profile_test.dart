@@ -193,6 +193,50 @@ void main() {
     });
   });
 
+  /// Opens the card through the real entry point, so the close button is
+  /// exercised the way a user reaches it - as a modal sheet that must pop.
+  Future<void> openCard(WidgetTester tester, PersonalProfile p) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => Center(
+              child: ElevatedButton(
+                onPressed: () => showStaffIdCard(context, profile: p),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+  }
+
+  group('Staff ID Card close control', () {
+    testWidgets('shows a back button that dismisses the card', (tester) async {
+      await openCard(tester, sample);
+
+      expect(find.byIcon(Icons.arrow_back), findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+
+      // The sheet is gone and the caller is visible again.
+      expect(find.byIcon(Icons.arrow_back), findsNothing);
+      expect(find.text('open'), findsOneWidget);
+    });
+
+    testWidgets('the close control is a real tap target', (tester) async {
+      await openCard(tester, sample);
+      // A visible, labelled control must exist - not just a system back gesture.
+      expect(find.byType(IconButton), findsWidgets);
+      expect(find.byTooltip('Close'), findsOneWidget);
+    });
+  });
+
   group('PersonalDetailsSheet', () {
     testWidgets('seeds the form from the record', (tester) async {
       await openEditor(tester, sample);

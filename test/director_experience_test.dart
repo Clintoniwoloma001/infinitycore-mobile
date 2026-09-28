@@ -25,6 +25,66 @@ class _Auth implements AuthGateState {
 }
 
 void main() {
+  // Regression guard for the Branch Performance screen showing
+  // "Invalid executive reporting period" on most days of the month.
+  group('executive reporting period is never in the future', () {
+    // get_director_executive_snapshot raises when v_end > current_date, so a
+    // period must be clamped to today. Without this, "this month" ended on the
+    // last day of the month and failed on every day except the last.
+    DateTime today() {
+      final n = DateTime.now();
+      return DateTime(n.year, n.month, n.day);
+    }
+
+    for (final build in <String, DirectorPeriod Function()>{
+      'today': DirectorPeriod.today,
+      'thisWeek': DirectorPeriod.thisWeek,
+      'thisMonth': DirectorPeriod.thisMonth,
+      'thisQuarter': DirectorPeriod.thisQuarter,
+    }.entries) {
+      test('${build.key} does not end after today', () {
+        final p = build.value();
+        // Compare at DATE granularity: the server receives a `date`, and
+        // `DateTime.now()` carries a time component that toIso() discards.
+        expect(
+          DirectorPeriod.toIso(p.to).compareTo(DirectorPeriod.toIso(today())) >
+              0,
+          isFalse,
+          reason:
+              '${build.key} ended ${DirectorPeriod.toIso(p.to)}, which is after '
+              'today. The server rejects any future end date.',
+        );
+      });
+
+      test('${build.key} is not inverted', () {
+        final p = build.value();
+        expect(
+          p.to.isBefore(p.from),
+          isFalse,
+          reason: '${build.key} produced an end before its start',
+        );
+      });
+    }
+
+    test('a custom range is clamped too', () {
+      final far = DateTime.now().add(const Duration(days: 400));
+      final p = DirectorPeriod.custom(
+        today().subtract(const Duration(days: 7)),
+        far,
+      );
+      expect(p.to.isAfter(today()), isFalse);
+    });
+
+    test('a period entirely in the past is left alone', () {
+      // Clamping must not drag a genuine historical range forward.
+      final from = DateTime(2024, 1, 1);
+      final to = DateTime(2024, 3, 31);
+      final p = DirectorPeriod.custom(from, to);
+      expect(p.from, from);
+      expect(p.to, to);
+    });
+  });
+
   group('Director role catalog', () {
     test('director, chairman and md_ceo all resolve to the family', () {
       expect(AppRoles.isExecutiveViewer(AppRoles.director), isTrue);
@@ -44,8 +104,11 @@ void main() {
         AppRoles.areaManager,
         AppRoles.customer,
       ]) {
-        expect(AppRoles.isExecutiveViewer(r), isFalse,
-            reason: '$r must not be an executive viewer');
+        expect(
+          AppRoles.isExecutiveViewer(r),
+          isFalse,
+          reason: '$r must not be an executive viewer',
+        );
       }
     });
 
@@ -59,12 +122,18 @@ void main() {
     });
 
     test('executive roles outrank normal management but not super admin', () {
-      expect(AppRoles.hierarchy[AppRoles.director]!,
-          greaterThan(AppRoles.hierarchy[AppRoles.areaManager]!));
-      expect(AppRoles.hierarchy[AppRoles.director]!,
-          lessThan(AppRoles.hierarchy[AppRoles.superAdmin]!));
-      expect(AppRoles.hierarchy[AppRoles.mdCeo]!,
-          lessThan(AppRoles.hierarchy[AppRoles.superAdmin]!));
+      expect(
+        AppRoles.hierarchy[AppRoles.director]!,
+        greaterThan(AppRoles.hierarchy[AppRoles.areaManager]!),
+      );
+      expect(
+        AppRoles.hierarchy[AppRoles.director]!,
+        lessThan(AppRoles.hierarchy[AppRoles.superAdmin]!),
+      );
+      expect(
+        AppRoles.hierarchy[AppRoles.mdCeo]!,
+        lessThan(AppRoles.hierarchy[AppRoles.superAdmin]!),
+      );
       // Parity with the web catalog (src/constants/roles.js ROLE_HIERARCHY).
       expect(AppRoles.hierarchy[AppRoles.mdCeo], 98);
       expect(AppRoles.hierarchy[AppRoles.chairman], 96);
@@ -74,14 +143,17 @@ void main() {
 
   group('Executive routing', () {
     String? decide(String role, String loc) => redirectDecision(
-          _Auth(status: AuthStatus.authenticated, role: role),
-          loc,
-          Uri.parse(loc),
-        );
+      _Auth(status: AuthStatus.authenticated, role: role),
+      loc,
+      Uri.parse(loc),
+    );
 
-    test('a director is sent to the executive workspace, not the staff home', () {
-      expect(decide(AppRoles.director, '/home'), executiveRoute);
-    });
+    test(
+      'a director is sent to the executive workspace, not the staff home',
+      () {
+        expect(decide(AppRoles.director, '/home'), executiveRoute);
+      },
+    );
 
     test('chairman and md_ceo get the same treatment as director', () {
       expect(decide(AppRoles.chairman, '/home'), executiveRoute);
@@ -92,10 +164,13 @@ void main() {
       expect(decide(AppRoles.director, executiveRoute), isNull);
     });
 
-    test('super admin keeps the normal home and may open the executive route', () {
-      expect(decide(AppRoles.superAdmin, '/home'), isNull);
-      expect(decide(AppRoles.superAdmin, executiveRoute), isNull);
-    });
+    test(
+      'super admin keeps the normal home and may open the executive route',
+      () {
+        expect(decide(AppRoles.superAdmin, '/home'), isNull);
+        expect(decide(AppRoles.superAdmin, executiveRoute), isNull);
+      },
+    );
 
     test('ordinary roles are redirected away from the executive route', () {
       for (final r in [
@@ -104,10 +179,13 @@ void main() {
         AppRoles.loanOfficer,
         AppRoles.branchManager,
         AppRoles.areaManager,
-        AppRoles.customer
+        AppRoles.customer,
       ]) {
-        expect(decide(r, executiveRoute), '/home',
-            reason: '$r must not reach the executive workspace');
+        expect(
+          decide(r, executiveRoute),
+          '/home',
+          reason: '$r must not reach the executive workspace',
+        );
       }
     });
 
@@ -117,7 +195,7 @@ void main() {
         AppRoles.hrOfficer,
         AppRoles.loanOfficer,
         AppRoles.branchManager,
-        AppRoles.areaManager
+        AppRoles.areaManager,
       ]) {
         expect(decide(r, '/home'), isNull, reason: '$r keeps /home');
       }
@@ -154,18 +232,31 @@ void main() {
         tenureLabel({'tenure_years': 12, 'tenure_months': 4}),
         '12 years 4 months in the business',
       );
-      expect(tenureLabel({'tenure_years': 7, 'tenure_months': 4}),
-          '7 years 4 months in the business');
-      expect(tenureLabel({'tenure_years': 1, 'tenure_months': 1}),
-          '1 year 1 month in the business');
-      expect(tenureLabel({'tenure_years': 0, 'tenure_months': 0}),
-          'Less than a month in the business');
+      expect(
+        tenureLabel({'tenure_years': 7, 'tenure_months': 4}),
+        '7 years 4 months in the business',
+      );
+      expect(
+        tenureLabel({'tenure_years': 1, 'tenure_months': 1}),
+        '1 year 1 month in the business',
+      );
+      expect(
+        tenureLabel({'tenure_years': 0, 'tenure_months': 0}),
+        'Less than a month in the business',
+      );
     });
 
     test('asList and asMap tolerate null and wrong shapes', () {
       expect(asList(null), isEmpty);
       expect(asList('nope'), isEmpty);
-      expect(asList([1, 'x', {'a': 1}]).length, 1);
+      expect(
+        asList([
+          1,
+          'x',
+          {'a': 1},
+        ]).length,
+        1,
+      );
       expect(asMap(null), isEmpty);
       expect(asMap('nope'), isEmpty);
     });
@@ -180,30 +271,51 @@ void main() {
   });
 
   group('Period windows', () {
+    // The windows below are clamped to today, because the server rejects a
+    // future end date. These assertions are therefore about the CALENDAR
+    // window and its upper bound, not about a fixed number of days - a window
+    // is only its full length once that day has actually been reached.
+    DateTime today() {
+      final n = DateTime.now();
+      return DateTime(n.year, n.month, n.day);
+    }
+
     test('today covers a single day', () {
       final p = DirectorPeriod.today();
-      expect(p.from, p.to);
+      expect(DirectorPeriod.toIso(p.from), DirectorPeriod.toIso(p.to));
     });
 
-    test('this week is seven days inclusive', () {
+    test('this week starts on Monday and never exceeds seven days', () {
       final p = DirectorPeriod.thisWeek();
-      expect(p.to.difference(p.from).inDays, 6);
-    });
-
-    test('this month ends on the last day of the month', () {
-      final p = DirectorPeriod.thisMonth();
-      expect(
-        p.to.difference(p.from).inDays + 1,
-        DateTime(p.to.year, p.to.month + 1, 0).day,
-      );
-    });
-
-    test('this quarter spans roughly three months', () {
-      final p = DirectorPeriod.thisQuarter();
+      expect(p.from.weekday, DateTime.monday);
       final days = p.to.difference(p.from).inDays + 1;
-      expect(days, greaterThanOrEqualTo(89));
-      expect(days, lessThanOrEqualTo(92));
+      expect(days, lessThanOrEqualTo(7));
+      expect(days, greaterThanOrEqualTo(1));
+      expect(p.to.isAfter(today()), isFalse);
     });
+
+    test('this month starts on the 1st and never exceeds the month length', () {
+      final p = DirectorPeriod.thisMonth();
+      expect(p.from.day, 1);
+      expect(p.from.month, DateTime.now().month);
+      final monthLength = DateTime(p.from.year, p.from.month + 1, 0).day;
+      final days = p.to.difference(p.from).inDays + 1;
+      expect(days, lessThanOrEqualTo(monthLength));
+      expect(days, greaterThanOrEqualTo(1));
+      expect(p.to.isAfter(today()), isFalse);
+    });
+
+    test(
+      'this quarter starts on a quarter boundary and spans at most 92 days',
+      () {
+        final p = DirectorPeriod.thisQuarter();
+        expect(p.from.month % 3, 1);
+        final days = p.to.difference(p.from).inDays + 1;
+        expect(days, lessThanOrEqualTo(92));
+        expect(days, greaterThanOrEqualTo(1));
+        expect(p.to.isAfter(today()), isFalse);
+      },
+    );
 
     test('iso dates are zero padded', () {
       expect(DirectorPeriod.toIso(DateTime(2026, 1, 5)), '2026-01-05');

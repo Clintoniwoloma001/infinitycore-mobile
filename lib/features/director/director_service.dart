@@ -39,25 +39,57 @@ class DirectorPeriod {
     return DirectorPeriod(n, n, 'Today');
   }
 
+  /// Never let a period run past today.
+  ///
+  /// `get_director_executive_snapshot` rejects any range whose end date is in
+  /// the future (`v_end > current_date` -> 'Invalid executive reporting
+  /// period'), so a naive "this month = 1st to the last day of the month"
+  /// fails on every day except the last one. The server's own default is
+  /// `coalesce(p_end_date, current_date)`, which confirms that month-to-date is
+  /// the intended meaning: there is no data for a future date to return.
+  static DateTime _notAfterToday(DateTime end) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return end.isAfter(today) ? today : end;
+  }
+
   static DirectorPeriod thisWeek() {
     final n = DateTime.now();
-    final start = DateTime(n.year, n.month, n.day).subtract(Duration(days: n.weekday - 1));
-    return DirectorPeriod(start, start.add(const Duration(days: 6)), 'This week');
+    final start = DateTime(
+      n.year,
+      n.month,
+      n.day,
+    ).subtract(Duration(days: n.weekday - 1));
+    return DirectorPeriod(
+      start,
+      _notAfterToday(start.add(const Duration(days: 6))),
+      'This week',
+    );
   }
 
   static DirectorPeriod thisMonth() {
     final n = DateTime.now();
-    return DirectorPeriod(DateTime(n.year, n.month), DateTime(n.year, n.month + 1, 0), 'This month');
+    return DirectorPeriod(
+      DateTime(n.year, n.month),
+      _notAfterToday(DateTime(n.year, n.month + 1, 0)),
+      'This month',
+    );
   }
 
   static DirectorPeriod thisQuarter() {
     final n = DateTime.now();
     final q = ((n.month - 1) ~/ 3) * 3 + 1;
-    return DirectorPeriod(DateTime(n.year, q), DateTime(n.year, q + 3, 0), 'This quarter');
+    return DirectorPeriod(
+      DateTime(n.year, q),
+      _notAfterToday(DateTime(n.year, q + 3, 0)),
+      'This quarter',
+    );
   }
 
+  /// A custom range is clamped for the same reason: an end date after today is
+  /// guaranteed to be rejected, and there are no records for it to return.
   static DirectorPeriod custom(DateTime from, DateTime to) =>
-      DirectorPeriod(from, to, 'Custom');
+      DirectorPeriod(from, _notAfterToday(to), 'Custom');
 }
 
 /// Thin typed view over the RPC payload. Fields are read defensively because a
@@ -105,17 +137,23 @@ class DirectorService {
       params: <String, dynamic>{
         if (from != null) 'p_start_date': DirectorPeriod.toIso(from),
         if (to != null) 'p_end_date': DirectorPeriod.toIso(to),
-        if (department != null && department.isNotEmpty) 'p_department': department,
+        if (department != null && department.isNotEmpty)
+          'p_department': department,
         if (area != null && area.isNotEmpty) 'p_area': area,
         if (role != null && role.isNotEmpty) 'p_role': role,
-        if (employeeId != null && employeeId.isNotEmpty) 'p_employee_id': employeeId,
+        if (employeeId != null && employeeId.isNotEmpty)
+          'p_employee_id': employeeId,
       },
     );
     if (res is Map<String, dynamic> && res['ok'] == false) {
-      throw DirectorException('${res['message'] ?? 'Unable to load executive data'}');
+      throw DirectorException(
+        '${res['message'] ?? 'Unable to load executive data'}',
+      );
     }
     if (res is! Map) {
-      throw const DirectorException('The server returned an unexpected response.');
+      throw const DirectorException(
+        'The server returned an unexpected response.',
+      );
     }
     return DirectorSnapshot(Map<String, dynamic>.from(res));
   }
@@ -132,7 +170,9 @@ class DirectorService {
       throw DirectorException('${res['message'] ?? 'Unable to load employee'}');
     }
     if (res is! Map) {
-      throw const DirectorException('The server returned an unexpected response.');
+      throw const DirectorException(
+        'The server returned an unexpected response.',
+      );
     }
     return Map<String, dynamic>.from(res);
   }
