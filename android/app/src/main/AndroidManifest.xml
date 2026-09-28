@@ -58,6 +58,38 @@
         android:label="InfinityCore"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!--
+          Background location. A foreground service is the only Android
+          mechanism allowed to keep recording while the app is not on screen;
+          the Dart heartbeat alone is suspended and killed with the UI isolate.
+
+          foregroundServiceType is REQUIRED from Android 14 and must be
+          accompanied by the matching FOREGROUND_SERVICE_LOCATION permission
+          (already declared above), otherwise startForeground() throws.
+        -->
+        <service
+            android:name=".LocationForegroundService"
+            android:exported="false"
+            android:stopWithTask="false"
+            android:foregroundServiceType="location" />
+
+        <!--
+          Post-reboot recovery. It only records that tracking was active; the
+          service refuses to run without a live session, so the app's own
+          eligibility/permission check on next launch is what resumes it. That
+          prevents tracking an account that has since been signed out.
+        -->
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="true"
+            android:enabled="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

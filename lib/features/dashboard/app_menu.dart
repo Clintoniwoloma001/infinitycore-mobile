@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/routing/app_destinations.dart';
 import '../../core/routing/app_router.dart';
 import '../../core/security/role_guard.dart';
 import '../../core/services/auth_service.dart';
@@ -13,7 +14,10 @@ import '../messages/messaging_hub.dart';
 /// One row in the top-right overflow menu.
 ///
 /// The menu is intentionally data-driven: adding a future destination means
-/// appending an [AppMenuAction] to [_menuActions], not editing layout code.
+/// appending an [AppMenuAction] to `appDestinations()` in
+/// `app_destinations.dart`, not editing layout code. Everything the user may
+/// reach is filtered through the shared role/department mapping first, so this
+/// menu and the bottom bar can never disagree about who may see what.
 class AppMenuAction {
   const AppMenuAction({
     required this.label,
@@ -28,22 +32,20 @@ class AppMenuAction {
   final String route;
 }
 
-List<AppMenuAction> _menuActions() {
-  final role = AuthService.instance.role;
-  return [
-    const AppMenuAction(
-      label: 'Profile',
-      subtitle: 'Personal details, documents and device security',
-      icon: Icons.person_outline,
-      route: '/profile',
-    ),
-    const AppMenuAction(
-      label: 'Notifications',
-      subtitle: 'Updates, approvals and operational alerts',
-      icon: Icons.notifications_none,
-      route: '/notifications',
-    ),
-    if (canAccessCommAdmin(role))
+/// Opens the top-right list menu.
+Future<void> showAppMenu(BuildContext context) {
+  final actions = [
+    for (final d in visibleDestinations())
+      AppMenuAction(
+        label: d.label,
+        subtitle: d.subtitle ?? '',
+        icon: d.icon,
+        route: d.route,
+      ),
+    // Communication Admin predates the department registry and has its own
+    // capability gate (mirroring `is_communication_admin()`), so it is added
+    // here rather than being forced into a department tag it does not have.
+    if (canAccessCommAdmin(AuthService.instance.role))
       const AppMenuAction(
         label: 'Communication Admin',
         subtitle: 'Channels, groups and announcement audiences',
@@ -51,11 +53,6 @@ List<AppMenuAction> _menuActions() {
         route: '/comm-admin',
       ),
   ];
-}
-
-/// Opens the top-right list menu.
-Future<void> showAppMenu(BuildContext context) {
-  final actions = _menuActions();
   return showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,

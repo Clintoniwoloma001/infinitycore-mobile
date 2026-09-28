@@ -10,7 +10,6 @@ import '../../core/services/auth_service.dart';
 import '../../core/services/biometrics.dart';
 import '../../core/services/device_identity.dart';
 import '../../core/services/employee_photo.dart';
-import '../../core/services/location_heartbeat.dart';
 import '../../core/services/mobile_session_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/theme_controller.dart';
@@ -20,7 +19,6 @@ import '../../shared/widgets/common.dart';
 import '../attendance/attendance_service.dart';
 import 'personal_details_sheet.dart';
 import 'profile_service.dart';
-import 'location_tracking_sheet.dart';
 import 'staff_id_card.dart';
 
 /// Employee + account screen. Rendered inside the home shell as the Profile
@@ -196,9 +194,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (!personal.hasStaffNumber) {
       setState(() => _photoBusy = true);
       try {
-        await ProfileService.instance.ensureEmployeeNumber(
-          personal.employeeId,
-        );
+        await ProfileService.instance.ensureEmployeeNumber(personal.employeeId);
         if (mounted) await _load();
         personal = _personal;
       } catch (e) {
@@ -214,52 +210,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     await showStaffIdCard(context, profile: personal, photoUrl: _photoUrl);
   }
 
-  /// Location tracking consent. Reached from the profile so the employee can
-  /// see exactly what is collected and turn it off at any time.
-  Widget _locationTrackingCard() {
-    final hb = LocationHeartbeat.instance;
-    return SectionCard(
-      title: 'Location tracking',
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: Text(
-            LocationHeartbeat.purposeMessage,
-            style: const TextStyle(fontSize: 11.5, height: 1.35),
-          ),
-        ),
-        ValueListenableBuilder<HeartbeatStatus>(
-          valueListenable: hb.status,
-          builder: (_, status, _) => Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: Text(
-              status.summary,
-              style: TextStyle(
-                fontSize: 11,
-                color: AppColors.textSecondary(context),
-              ),
-            ),
-          ),
-        ),
-        OutlinedButton.icon(
-          onPressed: () => LocationTrackingSheet.show(context),
-          icon: const Icon(Icons.my_location, size: 16),
-          label: Text(hb.isRunning ? 'Tracking options' : 'Review & enable'),
-        ),
-      ],
-    );
-  }
-
   Future<void> _openPersonalDetails() async {
     final personal = _personal;
     if (personal == null) {
       _showError('Your employee record is not available yet.');
       return;
     }
-    final saved = await showPersonalDetailsSheet(
-      context,
-      profile: personal,
-    );
+    final saved = await showPersonalDetailsSheet(context, profile: personal);
     if (saved == true) {
       // Re-read rather than patching locally: the RPC may normalise a value
       // (a date cast, a trimmed string) and the web view should match.
@@ -354,8 +311,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           const SizedBox(height: 12),
           if (_employee != null) _employeeCard(_employee!),
-          const SizedBox(height: 12),
-          _locationTrackingCard(),
           if (_personal != null) _personalCard(_personal!),
           const SizedBox(height: 12),
           const _AppearanceSection(),
@@ -600,7 +555,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         InfoRow(label: 'Sex', value: _pretty(at('sex'))),
         InfoRow(label: 'Marital status', value: _pretty(at('marital_status'))),
         InfoRow(label: 'Nationality', value: _pretty(at('nationality'))),
-        InfoRow(label: 'State of origin', value: _pretty(at('state_of_origin'))),
+        InfoRow(
+          label: 'State of origin',
+          value: _pretty(at('state_of_origin')),
+        ),
         InfoRow(label: 'LGA', value: _pretty(at('lga'))),
         InfoRow(label: 'Town / City', value: _pretty(at('town'))),
         InfoRow(
@@ -624,10 +582,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             'Emergency contact',
             style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
           ),
-          InfoRow(
-            label: 'Name',
-            value: _pretty(at('emergency_contact_name')),
-          ),
+          InfoRow(label: 'Name', value: _pretty(at('emergency_contact_name'))),
           InfoRow(
             label: 'Phone',
             value: _pretty(at('emergency_contact_phone')),

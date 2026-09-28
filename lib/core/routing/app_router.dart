@@ -13,6 +13,7 @@ import '../../features/admin/bound_devices_screen.dart';
 import '../../features/auth/splash_screen.dart';
 import '../../features/attendance/attendance_management_screen.dart';
 import '../../features/attendance/public_terminal_screen.dart';
+import '../../features/automation/automation_screen.dart';
 import '../../features/dashboard/home_shell.dart';
 import '../../features/director/director_shell.dart';
 import '../../features/messages/announcements_screen.dart';
@@ -21,8 +22,10 @@ import '../../features/messages/comm_admin_screen.dart';
 import '../../features/messages/conversation_screen.dart';
 import '../../features/messages/messages_screen.dart';
 import '../../features/notifications/notifications_screen.dart';
+import '../../features/performance/branch_performance_screen.dart';
 import '../../features/profile/profile_screen.dart';
 import '../../features/sara/sara_screen.dart';
+import '../../features/training/training_screen.dart';
 
 /// Global messenger so background services (notifications, sync) can surface
 /// SnackBars without a BuildContext.
@@ -124,6 +127,29 @@ final GoRouter appRouter = GoRouter(
     // RLS/RPC policies, so this is convenience rather than the security
     // boundary.
     GoRoute(path: '/comm-admin', builder: (_, _) => const CommAdminScreen()),
+
+    // Training & Development. Reads the same backend as the web Training
+    // module. Authoring controls are gated INSIDE the screen on
+    // `hr.training.read/manage`; this route is reachable by anyone who can
+    // see their own training, which is what the web `my-training` shared
+    // destination does.
+    GoRoute(path: '/training', builder: (_, _) => const TrainingScreen()),
+
+    // Automation Command Centre. READ-ONLY on mobile (edit is web-only); see
+    // features/automation/automation_service.dart for why. The server refuses
+    // status changes without `automation.portfolio.manage` regardless.
+    GoRoute(
+      path: '/automation',
+      builder: (_, _) => const AutomationCommandCentreScreen(),
+    ),
+
+    // Branch Performance. Reads the `branches` array of the same
+    // `get_director_executive_snapshot` RPC the Director workspace uses, so
+    // the figures cannot diverge from the web Director dashboard.
+    GoRoute(
+      path: '/branch-performance',
+      builder: (_, _) => const BranchPerformanceScreen(),
+    ),
   ],
 );
 

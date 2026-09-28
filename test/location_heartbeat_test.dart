@@ -26,10 +26,7 @@ void main() {
       // A stale fix would misrepresent where the person is. Anything older
       // than the ceiling is dropped rather than uploaded.
       expect(LocationHeartbeat.maxFixAge, const Duration(minutes: 5));
-      expect(
-        const Duration(minutes: 6) > LocationHeartbeat.maxFixAge,
-        isTrue,
-      );
+      expect(const Duration(minutes: 6) > LocationHeartbeat.maxFixAge, isTrue);
       expect(
         const Duration(seconds: 30) > LocationHeartbeat.maxFixAge,
         isFalse,
@@ -45,22 +42,23 @@ void main() {
     test('purpose is stated before any permission prompt', () {
       final message = LocationHeartbeat.purposeMessage;
       expect(message, isNotEmpty);
-      // The employee must be told the scope and how to stop it.
+      // The employee must be told the scope and how it starts.
       expect(message.toLowerCase(), contains('location'));
-      expect(message.toLowerCase(), contains('turn it off'));
+      expect(message.toLowerCase(), contains('starts automatically'));
+      // The Profile toggle is gone, so the copy must point at the control that
+      // actually exists (the OS permission) rather than an in-app switch that
+      // no longer renders anywhere.
+      expect(message.toLowerCase(), contains('permission'));
+      expect(message.toLowerCase(), isNot(contains('turn it off in settings')));
     });
 
     test('declining leaves attendance untouched', () {
-      // Tracking is optional and separate from clocking in/out, so the copy
-      // must not imply that opting out costs the employee anything.
-      final sheet = File('lib/features/profile/location_tracking_sheet.dart');
-      expect(sheet.existsSync(), isTrue);
-      final text = sheet.readAsStringSync();
-      expect(text, contains('does not affect'));
-      expect(text, contains('clocking in or out'));
-      // The permission is only requested AFTER the explanation is shown.
-      expect(text.indexOf('explainAndRequest'), greaterThan(0));
-      expect(text.indexOf('_enable'), greaterThan(0));
+      // Tracking is separate from clocking in/out, so the copy must not imply
+      // that declining costs the employee anything.
+      expect(
+        LocationHeartbeat.purposeMessage.toLowerCase(),
+        contains('clocking in and out works either way'),
+      );
     });
   });
 
@@ -125,7 +123,10 @@ void main() {
     });
 
     test('pluralises correctly', () {
-      expect(describeAge(const Duration(minutes: 1)), isNot(contains('minutes')));
+      expect(
+        describeAge(const Duration(minutes: 1)),
+        isNot(contains('minutes')),
+      );
       expect(describeAge(const Duration(minutes: 2)), contains('2 minutes'));
       expect(describeAge(const Duration(hours: 1)), isNot(contains('hours')));
     });
@@ -158,17 +159,55 @@ void _sourceGuards() {
       expect(source, contains('_UploadResult.fatal'));
     });
 
-    test('tracking resumes only for a signed-in session', () {
-      expect(source, contains('currentSession'));
+    test('tracking is only ever run for an authenticated session', () {
+      // The session check now lives in the service that decides whether to run,
+      // not in the capture engine.
+      final service = File('lib/core/services/location_tracking_service.dart')
+          .readAsStringSync();
+      expect(service, contains('currentSession'));
+      expect(service, contains('isAuthenticated'));
     });
 
-    test('the consent sheet owns start and stop', () {
-      final sheet =
-          File('lib/features/profile/location_tracking_sheet.dart')
-              .readAsStringSync();
-      expect(sheet, contains('explainAndRequest'));
-      expect(sheet, contains('LocationHeartbeat.instance.start()'));
-      expect(sheet, contains('LocationHeartbeat.instance.stop()'));
+    test('the tracking service owns start and stop, not a screen', () {
+      // The Profile card and its consent sheet are gone. Exactly one place may
+      // decide whether tracking runs, and it is a service - not a widget that
+      // the employee has to find and press.
+      expect(
+        File('lib/features/profile/location_tracking_sheet.dart').existsSync(),
+        isFalse,
+        reason: 'the manual toggle sheet must not come back',
+      );
+      final service = File('lib/core/services/location_tracking_service.dart')
+          .readAsStringSync();
+      expect(service, contains('startAutomatic'));
+      expect(service, contains('startLocalOnly'));
+      expect(service, contains('LocationHeartbeat.instance.stop()'));
+
+      // The Profile screen must not reach into location at all any more.
+      final profile = File('lib/features/profile/profile_screen.dart')
+          .readAsStringSync();
+      expect(profile, isNot(contains('Location tracking')));
+      expect(profile, isNot(contains('Review & enable')));
+      expect(profile, isNot(contains('LocationHeartbeat')));
+    });
+
+    test('auto-start never raises a permission prompt', () {
+      // Starting from a background launch must not ambush the employee with a
+      // system dialog, or nag for one they already refused.
+      final service = File('lib/core/services/location_tracking_service.dart')
+          .readAsStringSync();
+      expect(service, contains('Geolocator.checkPermission()'));
+      expect(service, isNot(contains('Geolocator.requestPermission()')));
+    });
+
+    test('one employee can never inherit another\'s queued positions', () {
+      // Points captured while signed out are tagged and only released to the
+      // same account; rebinding discards the previous account's queue.
+      final heartbeat = File('lib/core/services/location_heartbeat.dart')
+          .readAsStringSync();
+      expect(heartbeat, contains('captured_for'));
+      expect(heartbeat, contains('rebindTo'));
+      expect(heartbeat, contains('Belongs to another account'));
     });
   });
 }

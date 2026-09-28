@@ -60,19 +60,38 @@ class LocationHeartbeat {
   bool _inFlight = false;
   int _pendingCount = 0;
 
+  /// The account this device is bound to. Points captured while signed out are
+  /// tagged with it and are only ever released to the SAME account, so a second
+  /// employee signing in on a bound device can never inherit the first
+  /// employee's queued positions.
+  String? _boundUserId;
+
+  /// True while signed out but still bound to an employee: keep capturing on
+  /// device, upload nothing. There is no session for the server to attribute a
+  /// point to, and guessing would be worse than holding it.
+  bool _localOnly = false;
+
   /// Exposed so a screen can show honest status instead of assuming success.
-  final ValueNotifier<HeartbeatStatus> status =
-      ValueNotifier<HeartbeatStatus>(const HeartbeatStatus());
+  final ValueNotifier<HeartbeatStatus> status = ValueNotifier<HeartbeatStatus>(
+    const HeartbeatStatus(),
+  );
 
   bool get isRunning => _running;
 
-  /// The copy shown BEFORE any permission prompt. Location is never collected
-  /// silently - the user is told what it is for and can decline.
+  /// The disclosure shown BEFORE any permission prompt. Location is never
+  /// collected silently.
+  ///
+  /// Kept truthful after the Profile card was removed: there is no in-app
+  /// toggle any more, so claiming "turn it off in Settings" would point people
+  /// at a switch that does not exist. The real control is Android's own
+  /// permission for this app.
   static const String purposeMessage =
       'InfinityCore uses your location during authorized attendance and tracking '
       'periods to verify attendance locations and support workforce operations. '
-      'Tracking runs only while you are signed in and tracking is switched on, '
-      'and you can turn it off at any time in Settings.';
+      'Once you have allowed location access, tracking starts automatically '
+      'while you are signed in - you do not need to switch it on yourself. '
+      'To stop it, change InfinityCore\'s location permission in your device '
+      'settings. Clocking in and out works either way.';
 
   // -------------------------------------------------------------------------
   // Permission UX
@@ -117,6 +136,7 @@ class LocationHeartbeat {
   Future<void> start() async {
     if (_running) return;
     _running = true;
+    _localOnly = false;
     await _storage.write(key: _enabledKey, value: '1');
     // Record one immediately so an admin does not wait a full interval to see
     // anything, then settle onto the requested cadence.
@@ -124,30 +144,62 @@ class LocationHeartbeat {
     _timer = Timer.periodic(interval, (_) => unawaited(captureOnce()));
   }
 
+  /// Start tracking for an authenticated, eligible employee.
+  ///
+  /// Identical to [start] but does not depend on the old opt-in consent flag:
+  /// tracking is now an automatic platform capability, so the gate is "is this
+  /// an eligible employee with permission" - which
+  /// [LocationTrackingService] decides - and not "did someone visit a card and
+  /// press a button".
+  Future<void> startAutomatic({String? boundUserId}) async {
+    if (boundUserId != null) _boundUserId = boundUserId;
+    if (_running && !_localOnly) return;
+    _running = true;
+    _localOnly = false;
+    unawaited(captureOnce());
+    _timer ??= Timer.periodic(interval, (_) => unawaited(captureOnce()));
+  }
+
+  /// Keep capturing on device, upload nothing.
+  ///
+  /// Used on sign-out: the device remains bound to its employee, so the
+  /// requirement is to keep the heartbeat alive, but with no session there is
+  /// nothing for the server to attribute a point to. Points go to the encrypted
+  /// local queue and are released only if the same account signs back in.
+  Future<void> startLocalOnly() async {
+    if (_running && _localOnly) return;
+    _running = true;
+    _localOnly = true;
+    unawaited(captureOnce());
+    _timer ??= Timer.periodic(interval, (_) => unawaited(captureOnce()));
+  }
+
+  /// Point the device at a different account.
+  ///
+  /// Anything queued by the previous account is discarded rather than carried
+  /// over: the previous employee's positions must never be attributed to the
+  /// new one.
+  Future<void> rebindTo(String userId) async {
+    if (_boundUserId == userId) return;
+    _boundUserId = userId;
+    await _writeQueue(const []);
+  }
+
   Future<void> stop() async {
     _timer?.cancel();
     _timer = null;
     _running = false;
+    _localOnly = false;
     await _storage.delete(key: _enabledKey);
     status.value = const HeartbeatStatus();
   }
 
-  /// Restore the previous enabled state on app start. The permission itself is
-  /// NOT re-prompted: if the OS revoked it, [start] finds it missing and stays
-  /// idle rather than nagging on every launch.
-  ///
-  /// A signed-out device must not queue coordinates, so the session is checked
-  /// first - tracking resumes only for the person it belongs to.
-  Future<void> restoreIfEnabled() async {
-    try {
-      final session = await SupabaseService.currentSession();
-      if (session == null) return;
-      final flag = await _storage.read(key: _enabledKey);
-      if (flag == '1') await start();
-    } catch (_) {
-      /* a failed read simply leaves tracking off */
-    }
-  }
+  // NOTE: the old `restoreIfEnabled()` (resume only if the employee had
+  // previously pressed "Review & enable" on the Profile card) is deliberately
+  // GONE. Tracking is no longer opt-in, so resuming from a stored consent flag
+  // would under-start it for every employee who never visited that card.
+  // [LocationTrackingService] now decides on every start from live state
+  // instead: authenticated + eligible + permission already granted.
 
   // -------------------------------------------------------------------------
   // Capture
@@ -202,7 +254,28 @@ class LocationHeartbeat {
         'recorded_at': position.timestamp.toUtc().toIso8601String(),
         'source': 'mobile',
         'source_detail': 'heartbeat',
+        // Local-only attribution. Never sent to the server - the server
+        // resolves the employee from the session - but it is what stops one
+        // account's queued points being released to another on the same device.
+        'captured_for': _boundUserId,
       };
+
+      // Signed out but still bound to an employee: hold the point on device
+      // rather than trying to upload it. There is no session for the server to
+      // attribute it to, and an unattributed write would be worse than a
+      // delayed one.
+      if (_localOnly) {
+        await _enqueue(observation);
+        status.value = HeartbeatStatus(
+          running: true,
+          lastRecordedAt: position.timestamp,
+          pending: _pendingCount,
+          note:
+              'Signed out. Saved on this device and sent when the account '
+              'signs in again.',
+        );
+        return;
+      }
 
       final result = await _upload(observation);
       if (result == _UploadResult.ok) {
@@ -226,7 +299,8 @@ class LocationHeartbeat {
         // AFTER stop() because stop() clears it.
         await stop();
         status.value = const HeartbeatStatus(
-          note: 'Tracking stopped: this account has no employee record '
+          note:
+              'Tracking stopped: this account has no employee record '
               'linked, so locations cannot be accepted.',
         );
       }
@@ -317,6 +391,11 @@ class LocationHeartbeat {
 
   /// Retry queued observations oldest-first. Each keeps its original
   /// recorded_at, so the server still shows the true observation time.
+  ///
+  /// Only entries captured for the account that owns this device are released.
+  /// Anything tagged for a different account is dropped rather than uploaded:
+  /// the previous employee's positions must never be attributed to whoever
+  /// signed in afterwards.
   Future<void> _flushQueue() async {
     final items = await _readQueue();
     if (items.isEmpty) {
@@ -325,6 +404,11 @@ class LocationHeartbeat {
     }
     final remaining = <Map<String, dynamic>>[];
     for (final item in items) {
+      final capturedFor = item['captured_for'];
+      if (capturedFor != null && capturedFor != _boundUserId) {
+        // Belongs to another account. Delete it.
+        continue;
+      }
       final result = await _upload(item);
       if (result == _UploadResult.retry) remaining.add(item);
     }
@@ -385,4 +469,3 @@ String describeAge(Duration age) {
   }
   return '${age.inDays} day${age.inDays == 1 ? '' : 's'} ago';
 }
-

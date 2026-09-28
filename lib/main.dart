@@ -5,7 +5,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'app/infinity_core_app.dart';
 import 'core/config/env.dart';
-import 'core/services/location_heartbeat.dart';
+import 'core/services/location_tracking_service.dart';
 import 'core/services/notification_badge.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/reminder_service.dart';
@@ -48,10 +48,12 @@ Future<void> main() async {
 
   await ThemeController.instance.load();
 
-  // Resume background location tracking only if the employee previously gave
-  // consent on this device. Non-blocking, and it re-checks the session first so
-  // a signed-out device never records coordinates.
-  unawaited(LocationHeartbeat.instance.restoreIfEnabled());
+  // Background location is an automatic platform capability, not a Profile
+  // setting: this starts it for an authenticated, eligible employee who has
+  // already granted location permission, and keeps it correct across sign-in,
+  // sign-out and foreground/background transitions. Non-blocking, and it never
+  // raises a permission prompt on its own.
+  unawaited(LocationTrackingService.instance.init());
 
   runApp(const InfinityCoreApp());
 }

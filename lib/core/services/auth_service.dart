@@ -102,6 +102,12 @@ class AuthService extends ChangeNotifier implements AuthGateState {
   @override
   String get role => _profile?.role ?? '';
 
+  /// The employee's free-text department, used ONLY to refine the role->department
+  /// mapping for navigation. It is never an authority: a value here can add
+  /// nothing the role does not already permit beyond a genuinely matching
+  /// department key. See `navigation_config.dart`.
+  String get department => _profile?.department ?? '';
+
   AccessProfile get access =>
       buildAccess(_profile ?? Profile(id: _session?.user.id ?? ''), null);
 
