@@ -134,15 +134,86 @@ class IMeetService {
     return url;
   }
 
+  /// Folders the caller owns PLUS folders shared with them.
+  ///
+  /// This goes through `imeet_list_my_folders` rather than selecting the table
+  /// directly, because the RPC is the single place that resolves the three
+  /// states a folder can be in for the current user: owned, shared-and-full,
+  /// and shared-read-only. Selecting the table would lose the can_download
+  /// distinction and the UI would offer downloads the server then refuses.
   Future<List<IMeetFolder>> listFolders() async {
+    final res = await SupabaseService.client.rpc<Map<String, dynamic>>(
+      'imeet_list_my_folders',
+    );
+    final list = (res['folders'] as List<dynamic>?) ?? const [];
+    return [
+      for (final r in list.cast<Map<String, dynamic>>()) IMeetFolder.fromRow(r),
+    ];
+  }
+
+  /// People who currently have access to a folder. OWNER ONLY.
+  ///
+  /// A member is refused by the server, which is deliberate: someone given a
+  /// view of a folder has no business enumerating everyone else in it.
+  Future<List<IMeetFolderMember>> listFolderMembers(String folderId) async {
+    final res = await SupabaseService.client.rpc<Map<String, dynamic>>(
+      'imeet_list_folder_members',
+      params: {'p_folder_id': folderId},
+    );
+    final list = (res['members'] as List<dynamic>?) ?? const [];
+    return [
+      for (final r in list.cast<Map<String, dynamic>>())
+        IMeetFolderMember.fromRow(r),
+    ];
+  }
+
+  /// Grant (or re-grant) a person access to a folder.
+  ///
+  /// Idempotent by design: re-granting revives the existing membership row
+  /// rather than creating a duplicate, so a double-tap cannot produce two
+  /// grants for one person.
+  Future<void> shareFolder(
+    String folderId,
+    String userId, {
+    bool canView = true,
+    bool canDownload = true,
+  }) async {
+    await SupabaseService.client.rpc<Map<String, dynamic>>(
+      'imeet_share_folder',
+      params: {
+        'p_folder_id': folderId,
+        'p_user_id': userId,
+        'p_can_view': canView,
+        'p_can_download': canDownload,
+      },
+    );
+  }
+
+  /// Remove a person from a folder. The OWNER may do this at any time.
+  ///
+  /// The effect is immediate because every read re-checks the membership, so a
+  /// revoked person is denied on their very next request. A repeated call is a
+  /// safe no-op rather than an error, so a double-tap is harmless.
+  Future<void> unshareFolder(String folderId, String userId) async {
+    await SupabaseService.client.rpc<Map<String, dynamic>>(
+      'imeet_unshare_folder',
+      params: {'p_folder_id': folderId, 'p_user_id': userId},
+    );
+  }
+
+  /// A person who can be added to a folder: active staff, excluding the owner.
+  ///
+  /// This is a convenience lookup for the picker, NOT an authorization
+  /// decision — the server re-checks ownership of the folder regardless.
+  Future<List<Map<String, dynamic>>> shareablePeople(String folderId) async {
     final rows = _rows(
       await SupabaseService.client
-          .from('imeet_folders')
-          .select('*')
-          .order('sort_order')
-          .order('name'),
+          .from('profiles')
+          .select('id, full_name, email, role, department')
+          .eq('status', 'active')
+          .order('full_name'),
     );
-    return [for (final r in rows) IMeetFolder.fromRow(r)];
+    return rows;
   }
 
   // -------------------------------------------------------------------------

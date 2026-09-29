@@ -156,7 +156,7 @@ class _IMeetHomeScreenState extends State<IMeetHomeScreen> {
                   const SizedBox(height: 14),
                   FilledButton.icon(
                     onPressed: _quickRecord,
-                    icon: const Icon(Icons.mic, size: 20),
+                    icon: const Icon(Icons.graphic_eq, size: 20),
                     label: const Padding(
                       padding: EdgeInsets.symmetric(vertical: 14),
                       child: Text(
@@ -178,7 +178,7 @@ class _IMeetHomeScreenState extends State<IMeetHomeScreen> {
                       ),
                     const SizedBox(height: 12),
                   ],
-                  _SectionHeader(label: 'Today', icon: Icons.today),
+                  _SectionHeader(label: 'Today', icon: Icons.today_outlined),
                   if (_today.isEmpty)
                     const _EmptyHint(text: 'No meetings recorded for today.')
                   else
@@ -190,7 +190,7 @@ class _IMeetHomeScreenState extends State<IMeetHomeScreen> {
                         hasSummary: m.status == IMeetStatus.ready,
                       ),
                   const SizedBox(height: 16),
-                  _SectionHeader(label: 'Upcoming', icon: Icons.upcoming),
+                  _SectionHeader(label: 'Upcoming', icon: Icons.event),
                   if (_upcoming.isEmpty)
                     const _EmptyHint(text: 'No upcoming meetings yet.')
                   else
@@ -200,7 +200,7 @@ class _IMeetHomeScreenState extends State<IMeetHomeScreen> {
                         onTap: () => _openMeeting(m),
                       ),
                   const SizedBox(height: 16),
-                  _SectionHeader(label: 'Recent', icon: Icons.history),
+                  _SectionHeader(label: 'Recent', icon: Icons.timelapse),
                   if (_recent.isEmpty)
                     const _EmptyHint(
                       text: 'Your recorded meetings will appear here.',
@@ -214,7 +214,10 @@ class _IMeetHomeScreenState extends State<IMeetHomeScreen> {
                         hasSummary: m.status == IMeetStatus.ready,
                       ),
                   const SizedBox(height: 16),
-                  _SectionHeader(label: 'Folders', icon: Icons.folder_outlined),
+                  _SectionHeader(
+                    label: 'Folders',
+                    icon: Icons.folder_zip_outlined,
+                  ),
                   if (_folders.isEmpty)
                     const _EmptyHint(
                       text: 'Create folders to organize your meetings.',
@@ -361,7 +364,7 @@ class _FolderChip extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              Icons.folder_outlined,
+              Icons.folder_zip_outlined,
               size: 13,
               color: selected ? Colors.white : AppColors.textSecondary(context),
             ),
@@ -502,7 +505,7 @@ class _NewMeetingSheetState extends State<_NewMeetingSheet> {
                 folderId: _folderId,
               );
             },
-            icon: const Icon(Icons.mic, size: 20),
+            icon: const Icon(Icons.graphic_eq, size: 20),
             label: const Padding(
               padding: EdgeInsets.symmetric(vertical: 13),
               child: Text('Start recording'),

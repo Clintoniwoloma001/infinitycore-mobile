@@ -291,12 +291,12 @@ class _TimerDialState extends State<_TimerDial>
                 children: [
                   Icon(
                     live
-                        ? Icons.mic
+                        ? Icons.graphic_eq
                         : widget.state == IMeetRecordState.paused
-                        ? Icons.pause_circle_filled
+                        ? Icons.pause_circle_outline
                         : widget.state == IMeetRecordState.processing
                         ? Icons.hourglass_top
-                        : Icons.mic_none,
+                        : Icons.mic_none_rounded,
                     size: 26,
                     color: color,
                   ),
@@ -332,10 +332,18 @@ class _StateBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (icon, label, color) = switch (state) {
-      IMeetRecordState.recording => (Icons.mic, 'Recording', AppColors.rose),
-      IMeetRecordState.paused => (Icons.pause, 'Paused', AppColors.amber),
+      IMeetRecordState.recording => (
+        Icons.graphic_eq,
+        'Recording',
+        AppColors.rose,
+      ),
+      IMeetRecordState.paused => (
+        Icons.pause_rounded,
+        'Paused',
+        AppColors.amber,
+      ),
       IMeetRecordState.stopping => (
-        Icons.stop_circle_outlined,
+        Icons.cancel_outlined,
         'Finishing…',
         AppColors.amber,
       ),
@@ -345,7 +353,7 @@ class _StateBanner extends StatelessWidget {
         AppColors.accent(context),
       ),
       IMeetRecordState.idle => (
-        Icons.mic_none,
+        Icons.mic_none_rounded,
         processing ? 'Starting…' : 'Ready to record',
         AppColors.textTertiary(context),
       ),
@@ -409,7 +417,7 @@ class _Controls extends StatelessWidget {
             width: double.infinity,
             child: FilledButton.icon(
               onPressed: starting ? null : onStart,
-              icon: const Icon(Icons.mic, size: 22),
+              icon: const Icon(Icons.graphic_eq, size: 22),
               label: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 15),
                 child: Text(starting ? 'Starting…' : 'Start recording'),
@@ -440,7 +448,7 @@ class _Controls extends StatelessWidget {
         ),
         const SizedBox(width: 22),
         _CircleButton(
-          icon: recording ? Icons.pause : Icons.play_arrow,
+          icon: recording ? Icons.pause_rounded : Icons.play_arrow_rounded,
           label: recording ? 'Pause' : 'Resume',
           color: AppColors.amber,
           // 72dp: comfortably above the 48dp minimum touch target.
@@ -449,7 +457,7 @@ class _Controls extends StatelessWidget {
         ),
         const SizedBox(width: 22),
         _CircleButton(
-          icon: Icons.stop,
+          icon: Icons.stop_rounded,
           label: 'Stop',
           color: AppColors.rose,
           size: 72,

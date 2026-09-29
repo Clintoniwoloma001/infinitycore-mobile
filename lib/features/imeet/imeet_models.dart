@@ -223,6 +223,9 @@ class IMeetFolder {
     required this.name,
     this.colour,
     this.meetingCount = 0,
+    this.isOwner = true,
+    this.canDownload = true,
+    this.memberCount = 0,
   });
 
   final String id;
@@ -230,12 +233,65 @@ class IMeetFolder {
   final String? colour;
   final int meetingCount;
 
+  /// True when the signed-in user owns this folder. A folder shared WITH the
+  /// user is read-only: only the owner may share, revoke or delete.
+  final bool isOwner;
+
+  /// False when the owner shared the folder for reading only. The UI must not
+  /// offer a download button in that case — the server refuses it too, but the
+  /// button should never be shown in the first place.
+  final bool canDownload;
+
+  /// How many people currently have access (owner-only view).
+  final int memberCount;
+
+  /// A folder the user was given, rather than one they created.
+  bool get isShared => !isOwner;
+
   factory IMeetFolder.fromRow(Map<String, dynamic> r) => IMeetFolder(
     id: '${r['id'] ?? ''}',
     name: '${r['name'] ?? ''}',
     colour: r['colour'] as String?,
     meetingCount: (r['meeting_count'] as num?)?.toInt() ?? 0,
+    isOwner: r['is_owner'] != false,
+    canDownload: r['can_download'] != false,
+    memberCount: (r['member_count'] as num?)?.toInt() ?? 0,
   );
+}
+
+/// One person who has been given access to a shared folder.
+///
+/// `canDownload` is independent of `canView` so an owner can let someone read
+/// a summary while withholding the audio (for example a sensitive HR or
+/// disciplinary meeting).
+class IMeetFolderMember {
+  const IMeetFolderMember({
+    required this.userId,
+    required this.fullName,
+    this.email,
+    this.canView = true,
+    this.canDownload = true,
+    this.addedAt,
+  });
+
+  final String userId;
+  final String fullName;
+  final String? email;
+  final bool canView;
+  final bool canDownload;
+  final DateTime? addedAt;
+
+  bool get isViewOnly => canView && !canDownload;
+
+  factory IMeetFolderMember.fromRow(Map<String, dynamic> r) =>
+      IMeetFolderMember(
+        userId: '${r['user_id'] ?? ''}',
+        fullName: '${r['full_name'] ?? 'Unknown user'}',
+        email: r['email'] as String?,
+        canView: r['can_view'] != false,
+        canDownload: r['can_download'] != false,
+        addedAt: DateTime.tryParse('${r['added_at'] ?? ''}'),
+      );
 }
 
 /// A meeting plus everything the details page renders in one place.

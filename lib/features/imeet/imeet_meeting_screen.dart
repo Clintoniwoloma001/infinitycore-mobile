@@ -194,7 +194,7 @@ class _HeaderCard extends StatelessWidget {
               _MetaRow(icon: Icons.schedule, text: '$date · $time'),
             ],
             if (m.location?.isNotEmpty == true)
-              _MetaRow(icon: Icons.place_outlined, text: m.location!),
+              _MetaRow(icon: Icons.location_on, text: m.location!),
             if (m.description?.isNotEmpty == true) ...[
               const SizedBox(height: 8),
               Text(
@@ -306,7 +306,7 @@ class _RecordingsSection extends StatelessWidget {
                   const SizedBox(height: 10),
                   OutlinedButton.icon(
                     onPressed: onRecordFollowUp,
-                    icon: const Icon(Icons.mic, size: 18),
+                    icon: const Icon(Icons.graphic_eq, size: 18),
                     label: const Text('Record now'),
                   ),
                 ],
@@ -359,7 +359,7 @@ class _RecordingCard extends StatelessWidget {
             Row(
               children: [
                 Icon(
-                  r.isFollowUp ? Icons.replay : Icons.fiber_manual_record,
+                  r.isFollowUp ? Icons.refresh : Icons.fiber_manual_record,
                   size: 14,
                   color: r.isFollowUp
                       ? AppColors.accent(context)
@@ -427,7 +427,9 @@ class _RecordingCard extends StatelessWidget {
               child: TextButton.icon(
                 onPressed: onToggle,
                 icon: Icon(
-                  expanded ? Icons.expand_less : Icons.article_outlined,
+                  expanded
+                      ? Icons.keyboard_double_arrow_up_rounded
+                      : Icons.description_outlined,
                   size: 18,
                 ),
                 label: Text(expanded ? 'Hide transcript' : 'View transcript'),
@@ -699,7 +701,11 @@ class _ActionItemsSection extends StatelessWidget {
       children: [
         Row(
           children: [
-            Icon(Icons.checklist, size: 15, color: AppColors.accent(context)),
+            Icon(
+              Icons.done_all_rounded,
+              size: 15,
+              color: AppColors.accent(context),
+            ),
             const SizedBox(width: 6),
             Text(
               'ACTION ITEMS (${items.where((a) => a.isOpen).length} open)',
@@ -810,7 +816,7 @@ class _ParticipantsSection extends StatelessWidget {
         Row(
           children: [
             Icon(
-              Icons.people_outline,
+              Icons.groups_outlined,
               size: 15,
               color: AppColors.accent(context),
             ),

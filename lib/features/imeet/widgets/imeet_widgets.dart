@@ -28,13 +28,16 @@ class IMeetStatusPill extends StatelessWidget {
     final (icon, color) = switch (status) {
       IMeetStatus.ready => (Icons.check_circle_outline, AppColors.green),
       IMeetStatus.processing => (Icons.hourglass_top, AppColors.amber),
-      IMeetStatus.recording => (Icons.mic, AppColors.rose),
+      IMeetStatus.recording => (Icons.graphic_eq, AppColors.rose),
       IMeetStatus.failed => (Icons.error_outline, AppColors.rose),
       IMeetStatus.archived => (
-        Icons.archive_outlined,
+        Icons.storefront_outlined,
         AppColors.textTertiary(context),
       ),
-      IMeetStatus.draft => (Icons.edit_note, AppColors.textTertiary(context)),
+      IMeetStatus.draft => (
+        Icons.event_note_outlined,
+        AppColors.textTertiary(context),
+      ),
     };
     return Container(
       padding: EdgeInsets.symmetric(
@@ -138,7 +141,7 @@ class IMeetMeetingTile extends StatelessWidget {
                 Row(
                   children: [
                     Icon(
-                      Icons.place_outlined,
+                      Icons.location_on,
                       size: 12,
                       color: AppColors.textTertiary(context),
                     ),
@@ -176,7 +179,10 @@ class IMeetMeetingTile extends StatelessWidget {
                       accent: AppColors.green,
                     ),
                   if (folderName != null)
-                    _MetaChip(icon: Icons.folder_outlined, label: folderName!),
+                    _MetaChip(
+                      icon: Icons.folder_zip_outlined,
+                      label: folderName!,
+                    ),
                   if (meeting.isFromCalendar)
                     const _MetaChip(
                       icon: Icons.event_available,
