@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/services/notification_badge.dart';
 import '../../core/services/notification_deep_link.dart';
 import '../../core/services/supabase_service.dart';
 import '../../core/theme/app_theme.dart';
@@ -7,6 +8,7 @@ import '../../shared/models/models.dart';
 import '../../shared/utils/formatters.dart';
 import '../../shared/widgets/common.dart';
 import '../dashboard/home_shell.dart';
+import '../messages/urgent_ack_service.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -18,6 +20,7 @@ class NotificationsScreen extends StatefulWidget {
 class _NotificationsScreenState extends State<NotificationsScreen> {
   List<AppNotification> _items = [];
   bool _loading = true;
+  bool _markingAll = false;
   String? _error;
 
   @override
@@ -91,10 +94,79 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     );
   }
 
+  /// Marks EVERY unread notification read, in one server call.
+  ///
+  /// This clears ordinary informational alerts only. It must never be a way to
+  /// discharge a compliance obligation: an Important/Urgent message that
+  /// requires acknowledgment stays outstanding and keeps its own banner, because
+  /// `chat_message_acks` is a separate table that this path never touches. Read
+  /// state and acknowledgment state are different things and must not alias.
+  Future<void> _markAllRead() async {
+    setState(() => _markingAll = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final me = SupabaseService.userId ?? '';
+      if (me.isEmpty) return;
+      final rows = await SupabaseService.client
+          .from('notifications')
+          .update({'read': true})
+          .eq('user_id', me)
+          .eq('read', false)
+          .select('id');
+      if (!mounted) return;
+      // The ack banner is driven by its own queue, so refreshing the pending
+      // list keeps the outstanding obligation visible here too.
+      await _load();
+      await UrgentAckService.instance.refresh();
+      await NotificationBadge.instance.refresh();
+      final n = (rows as List<dynamic>?)?.length ?? 0;
+      if (n > 0) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              'Marked $n notification${n == 1 ? '' : 's'} as read.',
+            ),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Could not mark notifications as read: $e'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _markingAll = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final unread = _items.where((n) => !n.read).length;
     return Scaffold(
-      appBar: shellAppBar(context, title: 'Notifications'),
+      appBar: shellAppBar(
+        context,
+        title: 'Notifications',
+        // Available from the bell and from the menu alike, since both land on
+        // this screen.
+        actionsExtra: [
+          if (unread > 0)
+            TextButton.icon(
+              onPressed: _markingAll ? null : _markAllRead,
+              icon: _markingAll
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.done_all, size: 18),
+              label: const Text('Mark all as read'),
+            ),
+        ],
+      ),
       body: _loading
           ? const PageLoadingView(label: 'Loading notifications…')
           : _error != null && _items.isEmpty

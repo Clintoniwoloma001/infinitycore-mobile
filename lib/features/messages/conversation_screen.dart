@@ -38,6 +38,9 @@ class _ConversationScreenState extends State<ConversationScreen> {
   Map<String, Map<String, dynamic>> _directory = const {};
   Map<String, List<Map<String, dynamic>>> _reactions = {};
   Map<String, List<Map<String, dynamic>>> _attachments = {};
+  /// Acknowledgment rows per message, so a recipient in a group/channel sees
+  /// the same inline acknowledge control the web client shows.
+  Map<String, List<Map<String, dynamic>>> _acks = {};
   String _title = '';
   String _description = '';
   bool _loading = true;
@@ -161,6 +164,27 @@ class _ConversationScreenState extends State<ConversationScreen> {
     _markRead();
   }
 
+  /// Records the local user's acknowledgment of a group/channel message.
+  ///
+  /// Uses the same `acknowledge_chat_message` RPC the web client calls, so the
+  /// record is per USER rather than per device: acknowledging here satisfies the
+  /// obligation on web immediately, and a web acknowledgment clears it here on
+  /// the next realtime or lifecycle refresh. The sender is never blocked — the
+  /// server short-circuits for them, and `ackRequired` is false for their own
+  /// message, so this is only reachable for a genuine recipient.
+  Future<void> _acknowledge(String messageId) async {
+    await _runAction(
+      'Acknowledged',
+      () => CommunicationService.instance.acknowledgeMessage(messageId),
+    );
+    // Re-read the ack rows so the inline state and the sender's tally both
+    // update, and refresh the global queue so any outstanding banner for THIS
+    // message disappears immediately.
+    if (!mounted) return;
+    await _loadEnrichment(_messages);
+    await UrgentAckService.instance.refresh();
+  }
+
   /// Reactions + attachments are non-critical; a failure leaves the
   /// conversation fully readable without them.
   Future<void> _loadEnrichment(List<Map<String, dynamic>> messages) async {
@@ -180,10 +204,43 @@ class _ConversationScreenState extends State<ConversationScreen> {
       )) {
         attachments.putIfAbsent('${row['message_id']}', () => []).add(row);
       }
+      // Acknowledgment rows (points 2/5/16). Without these a recipient who
+      // opens the GROUP on mobile sees no acknowledge control on the message
+      // itself, even though the same message shows one on the web and in a
+      // direct thread. That asymmetry is the reported web/mobile parity defect.
+      // These are the SAME server rows the web client reads, so the state is
+      // per user, not per device.
+      final acks = <String, List<Map<String, dynamic>>>{};
+      for (final row in await CommunicationService.instance.acksFor(ids)) {
+        acks.putIfAbsent('${row['message_id']}', () => []).add(row);
+      }
+      // Resolve the acknowledgment recipients too. They are group/channel
+      // members who may never have posted here, so they are absent from the
+      // sender list — and an outstanding roster of raw UUIDs is not actionable
+      // for the sender.
+      final missing = {
+        for (final rows in acks.values)
+          for (final row in rows) '${row['user_id'] ?? ''}',
+      }..removeWhere((id) => id.isEmpty || _directory.containsKey(id));
+      var merged = _directory;
+      if (missing.isNotEmpty) {
+        try {
+          merged = {
+            ..._directory,
+            ...await CommunicationService.instance.resolveDirectory(
+              missing.toList(),
+            ),
+          };
+        } catch (_) {
+          // Cosmetic; the roster falls back to a short id.
+        }
+      }
       if (!mounted) return;
       setState(() {
         _reactions = reactions;
         _attachments = attachments;
+        _acks = acks;
+        _directory = merged;
       });
     } catch (_) {
       // Non-critical enrichment.
@@ -376,6 +433,8 @@ class _ConversationScreenState extends State<ConversationScreen> {
       byEmoji.putIfAbsent(emoji, () => []).add('${r['user_id']}');
     }
 
+    final acks = _acks[id] ?? const <Map<String, dynamic>>[];
+    final needsMyAck = CommunicationService.ackRequired(raw, acks, _me);
     return MessageBubble(
       message: raw,
       isMine: mine,
@@ -383,6 +442,12 @@ class _ConversationScreenState extends State<ConversationScreen> {
       attachments: _attachments[id] ?? const [],
       reactions: byEmoji,
       myUserId: _me,
+      acks: acks,
+      needsMyAck: needsMyAck,
+      onAcknowledge: needsMyAck ? () => _acknowledge(id) : null,
+      // The roster names real people, so resolve the recipients rather than
+      // letting a sender see a list of UUIDs.
+      nameFor: (uid) => '${_directory[uid]?['full_name'] ?? ''}',
       onLongPress: () => _showActions(raw),
       onToggleReaction: (emoji, mineReaction) => _runAction(
         mineReaction ? 'Reaction removed' : 'Reaction added',
