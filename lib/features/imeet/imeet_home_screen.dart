@@ -7,6 +7,7 @@ import '../../core/services/auth_service.dart';
 import '../dashboard/home_shell.dart';
 import 'imeet_models.dart';
 import 'imeet_service.dart';
+import 'widgets/imeet_folder_share_sheet.dart';
 import 'widgets/imeet_widgets.dart';
 
 /// I-Meet home — InfinityCore's meeting intelligence dashboard.
@@ -346,6 +347,22 @@ class _FolderChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
+      // Long-press opens sharing. A folder chip is a navigation control, and
+      // adding a visible button to every chip would crowd the row; long-press
+      // keeps the list clean while making sharing discoverable. Owners get a
+      // person icon so the capability is not hidden.
+      onLongPress: folder.isOwner
+          ? () async {
+              final changed = await IMeetFolderShareSheet.show(context, folder);
+              if (changed == true && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Sharing updated for this folder'),
+                  ),
+                );
+              }
+            }
+          : null,
       borderRadius: BorderRadius.circular(999),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
@@ -364,7 +381,10 @@ class _FolderChip extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              Icons.folder_zip_outlined,
+              // A shared folder reads differently from one you own, so the
+              // distinction is visible in the list itself and not only in a
+              // dialog.
+              folder.isShared ? Icons.folder_shared_outlined : Icons.folder_zip_outlined,
               size: 13,
               color: selected ? Colors.white : AppColors.textSecondary(context),
             ),
@@ -377,6 +397,23 @@ class _FolderChip extends StatelessWidget {
                 color: selected ? Colors.white : AppColors.textPrimary(context),
               ),
             ),
+            // View-only members are told, because they cannot download.
+            if (folder.isShared && !folder.canDownload) ...[
+              const SizedBox(width: 4),
+              Icon(
+                Icons.visibility_outlined,
+                size: 11,
+                color: selected ? Colors.white : AppColors.textTertiary(context),
+              ),
+            ],
+            if (folder.isOwner && folder.memberCount > 0) ...[
+              const SizedBox(width: 4),
+              Icon(
+                Icons.group_outlined,
+                size: 11,
+                color: selected ? Colors.white : AppColors.textTertiary(context),
+              ),
+            ],
           ],
         ),
       ),

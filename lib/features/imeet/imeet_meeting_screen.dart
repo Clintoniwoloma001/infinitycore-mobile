@@ -6,6 +6,7 @@ import '../../shared/widgets/common.dart';
 import '../dashboard/home_shell.dart';
 import 'imeet_models.dart';
 import 'imeet_service.dart';
+import 'widgets/imeet_recording_export.dart';
 import 'widgets/imeet_widgets.dart';
 
 /// Meeting details — summary, transcript and recordings in ONE place.
@@ -37,6 +38,11 @@ class _IMeetMeetingScreenState extends State<IMeetMeetingScreen> {
   bool _transcriptLoading = false;
   bool _transcriptFailed = false;
 
+  /// Whether the folder this meeting lives in allows downloads. Resolved from
+  /// the folder list rather than assumed, because a read-only share must HIDE
+  /// the save buttons instead of offering one the server will refuse.
+  bool _canDownload = true;
+
   @override
   void initState() {
     super.initState();
@@ -51,11 +57,35 @@ class _IMeetMeetingScreenState extends State<IMeetMeetingScreen> {
         _detail = d;
         _error = d == null ? 'This meeting is not available.' : null;
       });
+      await _resolveDownloadRight(d);
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = '$e');
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  /// Resolve whether this meeting's folder permits downloads.
+  ///
+  /// The folder list is the authority, and it only includes folders the caller
+  /// can see, so a folder the user lost access to simply does not resolve here
+  /// and the buttons stay hidden. A failure is NOT treated as "allowed": we
+  /// default to the safer side, and the server refuses the download anyway.
+  Future<void> _resolveDownloadRight(IMeetMeetingDetail? detail) async {
+    final folderId = detail?.meeting.folderId;
+    if (folderId == null || folderId.isEmpty) {
+      // A meeting with no folder is the owner's own; downloads are allowed.
+      if (mounted) setState(() => _canDownload = true);
+      return;
+    }
+    try {
+      final folders = await _service.listFolders();
+      if (!mounted) return;
+      final match = folders.where((f) => f.id == folderId).firstOrNull;
+      setState(() => _canDownload = match?.canDownload ?? false);
+    } catch (_) {
+      if (mounted) setState(() => _canDownload = false);
     }
   }
 
@@ -116,6 +146,7 @@ class _IMeetMeetingScreenState extends State<IMeetMeetingScreen> {
                     transcriptFailed: _transcriptFailed,
                     onToggleTranscript: _toggleTranscript,
                     onRecordFollowUp: _recordFollowUp,
+                    canDownload: _canDownload,
                   ),
                   const SizedBox(height: 16),
                   _ActionItemsSection(detail: _detail!),
@@ -261,6 +292,7 @@ class _RecordingsSection extends StatelessWidget {
     required this.transcriptFailed,
     required this.onToggleTranscript,
     required this.onRecordFollowUp,
+    this.canDownload = true,
   });
 
   final IMeetMeetingDetail detail;
@@ -270,6 +302,10 @@ class _RecordingsSection extends StatelessWidget {
   final bool transcriptFailed;
   final ValueChanged<IMeetRecording> onToggleTranscript;
   final VoidCallback onRecordFollowUp;
+
+  /// False when the folder was shared read-only: the save buttons are then
+  /// hidden rather than shown and then refused by the server.
+  final bool canDownload;
 
   @override
   Widget build(BuildContext context) {
@@ -322,6 +358,8 @@ class _RecordingsSection extends StatelessWidget {
               transcriptLoading: transcriptLoading,
               transcriptFailed: transcriptFailed,
               onToggle: () => onToggleTranscript(r),
+              meetingTitle: detail.meeting.title,
+              canDownload: canDownload,
             ),
       ],
     );
@@ -337,6 +375,8 @@ class _RecordingCard extends StatelessWidget {
     required this.transcriptLoading,
     required this.transcriptFailed,
     required this.onToggle,
+    this.meetingTitle = 'Meeting',
+    this.canDownload = true,
   });
 
   final IMeetRecording recording;
@@ -345,6 +385,12 @@ class _RecordingCard extends StatelessWidget {
   final bool transcriptLoading;
   final bool transcriptFailed;
   final VoidCallback onToggle;
+
+  /// Used only to name the saved file, so two meetings never collide.
+  final String meetingTitle;
+
+  /// False when this folder was shared read-only, which hides the save buttons.
+  final bool canDownload;
 
   @override
   Widget build(BuildContext context) {
@@ -441,6 +487,15 @@ class _RecordingCard extends StatelessWidget {
                 failed: transcriptFailed,
                 text: transcript,
               ),
+            const SizedBox(height: 8),
+            // Download / save. Hidden (with an explanation) when the owner
+            // shared the folder read-only, so the user is never offered a
+            // button the server will refuse.
+            IMeetRecordingExport(
+              recording: r,
+              canDownload: canDownload,
+              meetingTitle: meetingTitle,
+            ),
           ],
         ),
       ),
