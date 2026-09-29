@@ -21,6 +21,9 @@ import '../../features/messages/chat_screen.dart';
 import '../../features/messages/comm_admin_screen.dart';
 import '../../features/messages/conversation_screen.dart';
 import '../../features/messages/messages_screen.dart';
+import '../../features/imeet/imeet_home_screen.dart';
+import '../../features/imeet/imeet_meeting_screen.dart';
+import '../../features/imeet/imeet_record_screen.dart';
 import '../../features/notifications/notifications_screen.dart';
 import '../../features/performance/branch_performance_screen.dart';
 import '../../features/profile/profile_screen.dart';
@@ -98,6 +101,24 @@ final GoRouter appRouter = GoRouter(
     // route so `channel`, `group` and `announcements` are not swallowed by it.
     // ----------------------------------------------------------------
     GoRoute(path: '/messages', builder: (_, _) => const MessagesScreen()),
+    // ----------------------------------------------------------------
+    // I-MEET — AI meeting intelligence.
+    // Ordered so the static `/imeet/record` route is declared before the
+    // `:meetingId` parameter route, otherwise `record` is swallowed as an id.
+    // ----------------------------------------------------------------
+    GoRoute(path: '/imeet', builder: (_, _) => const IMeetHomeScreen()),
+    GoRoute(
+      path: '/imeet/record',
+      builder: (_, state) => IMeetRecordScreen(
+        args: (state.extra as Map?)?.cast<String, dynamic>() ?? const {},
+      ),
+    ),
+    GoRoute(
+      path: '/imeet/:meetingId',
+      builder: (_, state) => IMeetMeetingScreen(
+        meetingId: state.pathParameters['meetingId'] ?? '',
+      ),
+    ),
     GoRoute(
       path: '/messages/announcements',
       builder: (_, _) => const AnnouncementsScreen(),

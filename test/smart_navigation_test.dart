@@ -74,7 +74,10 @@ void main() {
     test('a plain employee sees only the shared set', () {
       expect(
         visibleFor(AppRoles.staff),
-        <String>['profile', 'notifications', 'training'],
+        // I-Meet is shared: recording a meeting and reading one's own meetings
+        // is not a departmental privilege. It is listed after Training because
+        // that is where it sits in the registry.
+        <String>['profile', 'notifications', 'training', 'imeet'],
       );
     });
 
@@ -177,6 +180,12 @@ void main() {
         'notifications',
         'training',
         'branch-performance',
+        // I-MEET: universal in the same way "own training" is. Every employee
+        // may record a meeting and read their OWN meetings. This does not grant
+        // access to anyone else's audio - that is refused per-meeting by RLS
+        // (owner or a frozen participant), which is a stricter check than any
+        // role tag could express here.
+        'imeet',
       };
       for (final d in appDestinations()) {
         if (d.department != null) continue;

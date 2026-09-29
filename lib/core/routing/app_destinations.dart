@@ -84,6 +84,25 @@ List<AppDestination> appDestinations() => const [
     route: '/training',
   ),
 
+  // I-MEET.
+  //
+  // OWNERSHIP: shared, like Training above. Recording a meeting and reading
+  // one's OWN meetings is a capability of every employee, and I-Meet has no
+  // module owner that should gate it departmentally.
+  //
+  // This is NOT a weaker security posture than a department tag would be: the
+  // gate here is per-MEETING rather than per-ROLE. RLS admits a caller only if
+  // they own the meeting or were a frozen participant on it, so a shared menu
+  // entry still cannot surface another person's audio. The list query only ever
+  // returns meetings the caller may read.
+  AppDestination(
+    id: 'imeet',
+    label: 'I-Meet',
+    subtitle: 'Record meetings, transcripts, summaries and action items',
+    icon: Icons.graphic_eq,
+    route: '/imeet',
+  ),
+
   // --- Departmental -------------------------------------------------------
 
   // Automation Command Centre.
