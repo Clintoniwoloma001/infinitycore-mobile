@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/services/notification_service.dart';
 import '../../core/services/supabase_service.dart';
+import 'acknowledgement_service.dart';
 import 'communication_service.dart';
 import 'messages_service.dart';
 
@@ -226,6 +227,34 @@ class MessagingHub with WidgetsBindingObserver {
     final title = isAnnouncement
         ? '${sender.isEmpty ? 'Announcement' : sender} · Official notice'
         : (sender.isEmpty ? 'New message' : sender);
+
+    // Points 10/12/17: an Important or Urgent message that demands an
+    // acknowledgment gets the canonical copy and the alarm-grade channel, so
+    // it is unmistakable and still sounds with the app backgrounded or the
+    // device locked. A `normal` message keeps the routine channel, and its
+    // heading, so nothing else changes.
+    final needsAck =
+        CommunicationService.messageRequiresAck(record) &&
+            !isAnnouncement;
+    if (needsAck) {
+      final copy = AcknowledgementService.notificationCopy(
+        priority: priority,
+        senderName: sender,
+      );
+      await NotificationService.instance.init();
+      await NotificationService.instance.show(
+        // Deterministic per message, so a replayed event cannot stack
+        // duplicates while distinct messages still notify.
+        id: _notificationId('${record['id'] ?? event.conversationId}'),
+        title: copy.title,
+        body: copy.body,
+        // Focus the message so the tap lands on the acknowledgment control.
+        route: '${_routeFor(event)}?focus=${record['id'] ?? ''}',
+        channel: NotificationService.channelReminders,
+        highPriority: true,
+      );
+      return;
+    }
 
     await NotificationService.instance.init();
     await NotificationService.instance.show(

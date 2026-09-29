@@ -496,20 +496,107 @@ void main() {
       expect(find.text('Safety briefing'), findsNothing);
     });
 
-    testWidgets('blocks the app and names the obligation', (tester) async {
+    testWidgets('shows the obligation without blocking the app', (tester) async {
       UrgentAckService.instance.pending.value = [item];
       await tester.pumpWidget(harness(const Scaffold(body: Text('Home'))));
       await tester.pump();
 
-      // The screen underneath is still mounted, but the gate covers it.
-      expect(find.text('Safety briefing'), findsOneWidget);
+      // The banner names the obligation AND the screen underneath is still
+      // usable. This is the change from the old undismissable modal, which
+      // contradicted "the sender must never be blocked" and "the reminder must
+      // be dismissible but resurface".
+      expect(find.text('Home'), findsOneWidget);
       expect(find.text('Evacuate via the north stairs.'), findsOneWidget);
       expect(
-        find.text('Urgent — acknowledgement required'),
+        find.text('URGENT MESSAGE — acknowledgement required'),
+        findsOneWidget,
+      );
+      expect(find.text('Acknowledge'), findsOneWidget);
+      expect(find.text('View'), findsOneWidget);
+    });
+
+    testWidgets('an important message is labelled distinctly', (tester) async {
+      UrgentAckService.instance.pending.value = [
+        PendingAck(
+          id: 'm3',
+          kind: PendingAckKind.message,
+          title: 'Policy change',
+          body: 'Effective Monday.',
+          senderName: 'Priya',
+          createdAt: '2026-09-24T08:00:00Z',
+          priority: 'high',
+          threadId: 't1',
+        ),
+      ];
+      await tester.pumpWidget(harness(const Scaffold(body: Text('Home'))));
+      await tester.pump();
+      expect(
+        find.text('IMPORTANT MESSAGE — acknowledgement required'),
         findsOneWidget,
       );
       expect(
-        find.text('I have read and acknowledge this'),
+        find.text('URGENT MESSAGE — acknowledgement required'),
+        findsNothing,
+      );
+    });
+
+    testWidgets('dismissing hides the banner but keeps the obligation',
+        (tester) async {
+      // Point 8: dismissal is NOT acknowledgment. The banner goes away for
+      // five minutes while the item stays in the pending queue, so the
+      // five-minute reminder and the resurfacing banner can still reach it.
+      UrgentAckService.instance.pending.value = [item];
+      await tester.pumpWidget(harness(const Scaffold(body: Text('Home'))));
+      await tester.pump();
+      expect(
+        find.text('URGENT MESSAGE — acknowledgement required'),
+        findsOneWidget,
+      );
+
+      UrgentAckService.instance.dismissUntil(
+        'm1',
+        AckReminderBanner.resurfaceAfter,
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(
+        find.text('URGENT MESSAGE — acknowledgement required'),
+        findsNothing,
+      );
+      // The obligation itself is untouched: still pending, still counted.
+      expect(UrgentAckService.instance.hasPending, isTrue);
+      expect(UrgentAckService.instance.count, 1);
+      expect(UrgentAckService.instance.isDismissed('m1'), isTrue);
+      // Let the resurfacing timer fire so the test leaves no pending timers.
+      await tester.pump(AckReminderBanner.resurfaceAfter);
+    });
+
+    testWidgets('dismissal expires after exactly five minutes', (tester) async {
+      // The banner must come back on its own, forever, until acknowledged.
+      UrgentAckService.instance.pending.value = [item];
+      await tester.pumpWidget(harness(const Scaffold(body: Text('Home'))));
+      await tester.pump();
+      UrgentAckService.instance.dismissUntil(
+        'm1',
+        AckReminderBanner.resurfaceAfter,
+      );
+      await tester.pump();
+      expect(
+        find.text('URGENT MESSAGE — acknowledgement required'),
+        findsNothing,
+      );
+
+      // One second short of the window: still hidden.
+      await tester.pump(const Duration(minutes: 5) - const Duration(seconds: 1));
+      expect(
+        find.text('URGENT MESSAGE — acknowledgement required'),
+        findsNothing,
+      );
+      // Cross the boundary and it resurfaces.
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pump();
+      expect(
+        find.text('URGENT MESSAGE — acknowledgement required'),
         findsOneWidget,
       );
     });
@@ -520,7 +607,7 @@ void main() {
           id: 'newer',
           kind: PendingAckKind.message,
           title: 'Newest',
-          body: '',
+          body: 'Newest body',
           senderName: '',
           createdAt: '2026-09-25T08:00:00Z',
         ),
@@ -528,18 +615,22 @@ void main() {
           id: 'older',
           kind: PendingAckKind.message,
           title: 'Oldest',
-          body: '',
+          body: 'Oldest body',
           senderName: '',
           createdAt: '2026-09-20T08:00:00Z',
         ),
       ];
       await tester.pumpWidget(harness(const Scaffold(body: Text('Home'))));
       await tester.pump();
-      expect(find.text('Oldest'), findsOneWidget);
-      expect(find.text('Newest'), findsNothing);
+      // The banner surfaces the message body, so assert on that: the OLDEST
+      // obligation is shown and the newer one waits its turn.
+      expect(find.text('Oldest body'), findsOneWidget);
+      expect(find.text('Newest body'), findsNothing);
     });
 
     testWidgets('counts the rest of the queue', (tester) async {
+      // The banner works one obligation at a time, oldest first, so the queue
+      // depth is surfaced by the service rather than printed under the button.
       UrgentAckService.instance.pending.value = [
         item,
         PendingAck(
@@ -553,31 +644,59 @@ void main() {
       ];
       await tester.pumpWidget(harness(const Scaffold(body: Text('Home'))));
       await tester.pump();
-      expect(find.textContaining('1 more message'), findsOneWidget);
+      expect(UrgentAckService.instance.count, 2);
+      // The OLDEST is the one on screen, never a later one.
+      expect(find.text('Evacuate via the north stairs.'), findsOneWidget);
     });
 
-    testWidgets('a network failure never dismisses the gate', (tester) async {
+    testWidgets('a network failure never clears the obligation', (tester) async {
       // Simulates the "server did not record it" path: the queue is untouched
-      // by design, so the user stays blocked and can retry.
+      // by design, so the obligation survives and can be retried.
       UrgentAckService.instance.pending.value = [item];
       await tester.pumpWidget(harness(const Scaffold(body: Text('Home'))));
       await tester.pump();
-      expect(find.text('Safety briefing'), findsOneWidget);
+      expect(
+        find.text('URGENT MESSAGE — acknowledgement required'),
+        findsOneWidget,
+      );
       UrgentAckService.instance.pending.value = [item];
       await tester.pump();
-      expect(find.text('Safety briefing'), findsOneWidget);
+      expect(
+        find.text('URGENT MESSAGE — acknowledgement required'),
+        findsOneWidget,
+      );
     });
 
-    testWidgets('clearing the queue removes the overlay', (tester) async {
+    testWidgets('clearing the queue removes the banner', (tester) async {
       UrgentAckService.instance.pending.value = [item];
       await tester.pumpWidget(harness(const Scaffold(body: Text('Home'))));
       await tester.pump();
-      expect(find.text('Safety briefing'), findsOneWidget);
+      expect(
+        find.text('URGENT MESSAGE — acknowledgement required'),
+        findsOneWidget,
+      );
 
       UrgentAckService.instance.pending.value = const [];
       await tester.pump();
       await tester.pump();
-      expect(find.text('Safety briefing'), findsNothing);
+      expect(
+        find.text('URGENT MESSAGE — acknowledgement required'),
+        findsNothing,
+      );
+    });
+
+    testWidgets('the banner is visible on any screen, not just Messages',
+        (tester) async {
+      // Point 7: mounted above the router, so the obligation follows the user
+      // across the app instead of hiding on every non-Messages route.
+      UrgentAckService.instance.pending.value = [item];
+      await tester.pumpWidget(harness(const Scaffold(body: Text('Attendance'))));
+      await tester.pump();
+      expect(find.text('Attendance'), findsOneWidget);
+      expect(
+        find.text('URGENT MESSAGE — acknowledgement required'),
+        findsOneWidget,
+      );
     });
   });
 
