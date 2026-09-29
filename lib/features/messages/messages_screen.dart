@@ -10,6 +10,7 @@ import '../../shared/models/models.dart';
 import '../../shared/utils/formatters.dart';
 import '../../shared/widgets/common.dart';
 import '../dashboard/home_shell.dart';
+import '../dashboard/host_fab.dart';
 import 'communication_service.dart';
 import 'create_sheets.dart';
 import 'message_ui.dart';
@@ -58,16 +59,25 @@ class _MessagesScreenState extends State<MessagesScreen>
   @override
   void initState() {
     super.initState();
+    // The published button is tab-specific, so a tab swipe must republish it.
+    _tabs.addListener(_onTabChanged);
     MessagingHub.instance.start();
     _load();
   }
 
   @override
   void dispose() {
+    _tabs.removeListener(_onTabChanged);
     _tabs.dispose();
     // The hub is a process-wide singleton started at launch; this screen only
     // listens, so nothing is torn down here.
     super.dispose();
+  }
+
+  void _onTabChanged() {
+    if (!mounted) return;
+    // Rebuild so HostFabPublisher re-runs its builder with the new tab index.
+    setState(() {});
   }
 
   Future<void> _load() async {
@@ -135,6 +145,58 @@ class _MessagesScreenState extends State<MessagesScreen>
     }
   }
 
+  /// The compose button for the visible tab, handed to the shell's FAB slot.
+  ///
+  /// Only the embedded instance publishes: a standalone Messages route owns its
+  /// own Scaffold and shows the button itself, so publishing there would leave
+  /// a duplicate.
+  Widget? _composeFab(BuildContext context) {
+    if (!widget.embedded) return null;
+    final (label, heroTag, onPressed) = switch (_tabs.index) {
+      1 => ('New channel', 'new_channel', _newChannel),
+      2 => ('New group', 'new_group', _newGroup),
+      _ => ('New chat', 'new_chat', _newChat),
+    };
+    return FloatingActionButton.small(
+      heroTag: heroTag,
+      tooltip: label,
+      backgroundColor: AppColors.accent(context),
+      foregroundColor: Colors.white,
+      onPressed: onPressed,
+      child: const Icon(Icons.edit),
+    );
+  }
+
+  Future<void> _newChat() => showPersonPickerSheet(
+    context,
+    title: 'Start a conversation',
+    onPick: (userId) async {
+      final thread = await MessagingService.instance.getOrCreateThread(userId);
+      final threadId = '${thread['id'] ?? ''}';
+      if (threadId.isEmpty) {
+        if (mounted) showSnack('Conversation could not be opened.');
+        return;
+      }
+      if (mounted) await context.push('/messages/$threadId');
+    },
+  );
+
+  Future<void> _newChannel() => showCreateChannelSheet(
+    context,
+    onCreated: (id) async {
+      if (mounted) await context.push('/messages/channel/$id');
+      if (mounted) await _load();
+    },
+  );
+
+  Future<void> _newGroup() => showCreateGroupSheet(
+    context,
+    onCreated: (id) async {
+      if (mounted) await context.push('/messages/group/$id');
+      if (mounted) await _load();
+    },
+  );
+
   Future<void> _openThread(BuildContext context, String threadId) async {
     await context.push('/messages/$threadId');
     if (mounted) await _load();
@@ -183,6 +245,13 @@ class _MessagesScreenState extends State<MessagesScreen>
                       ),
                     ),
                   ),
+                // Publish the tab's compose button into the shell's FAB slot
+                // instead of floating it here. The shell's SARA mark paints
+                // above the whole body, so a button positioned in this Stack
+                // was covered by it and could not be tapped.
+                HostFabPublisher(
+                  builder: (context) => _composeFab(context),
+                ),
                 _SearchBar(onChanged: (v) => setState(() => _query = v)),
                 TabBar(
                   controller: _tabs,
@@ -210,24 +279,7 @@ class _MessagesScreenState extends State<MessagesScreen>
                         query: _query,
                         onRefresh: _load,
                         onOpenThread: (id) => _openThread(context, id),
-                        onNewChat: () => showPersonPickerSheet(
-                          context,
-                          title: 'Start a conversation',
-                          onPick: (userId) async {
-                            final thread = await MessagingService.instance
-                                .getOrCreateThread(userId);
-                            final threadId = '${thread['id'] ?? ''}';
-                            if (threadId.isEmpty) {
-                              if (context.mounted) {
-                                showSnack('Conversation could not be opened.');
-                              }
-                              return;
-                            }
-                            if (context.mounted) {
-                              await context.push('/messages/$threadId');
-                            }
-                          },
-                        ),
+                        onNewChat: _newChat,
                       ),
                       _ChannelList(
                         channels: _channels,
@@ -242,15 +294,7 @@ class _MessagesScreenState extends State<MessagesScreen>
                           }
                           if (mounted) await _load();
                         },
-                        onCreate: () => showCreateChannelSheet(
-                          context,
-                          onCreated: (id) async {
-                            if (context.mounted) {
-                              await context.push('/messages/channel/$id');
-                            }
-                            if (mounted) await _load();
-                          },
-                        ),
+                        onCreate: _newChannel,
                       ),
                       _GroupList(
                         groups: _groups,
@@ -262,15 +306,7 @@ class _MessagesScreenState extends State<MessagesScreen>
                           }
                           if (mounted) await _load();
                         },
-                        onCreate: () => showCreateGroupSheet(
-                          context,
-                          onCreated: (id) async {
-                            if (context.mounted) {
-                              await context.push('/messages/group/$id');
-                            }
-                            if (mounted) await _load();
-                          },
-                        ),
+                        onCreate: _newGroup,
                       ),
                     ],
                   ),
@@ -378,30 +414,15 @@ class _ThreadList extends StatelessWidget {
               )
               .toList();
     if (visible.isEmpty) {
-      return Stack(
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
         children: [
-          ListView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            children: [
-              const SizedBox(height: 200),
-              PageEmptyView(
-                title: q.isEmpty ? 'No conversations yet' : 'No matches',
-                description: q.isEmpty
-                    ? 'Start a new chat with a colleague using the compose button.'
-                    : 'No conversation matches "$query".',
-              ),
-            ],
-          ),
-          Positioned(
-            right: 16,
-            bottom: 20,
-            child: FloatingActionButton.small(
-              backgroundColor: AppColors.accent(context),
-              foregroundColor: Colors.white,
-              heroTag: 'new_chat',
-              onPressed: onNewChat,
-              child: const Icon(Icons.edit),
-            ),
+          const SizedBox(height: 200),
+          PageEmptyView(
+            title: q.isEmpty ? 'No conversations yet' : 'No matches',
+            description: q.isEmpty
+                ? 'Start a new chat with a colleague using the compose button.'
+                : 'No conversation matches "$query".',
           ),
         ],
       );
@@ -505,17 +526,6 @@ class _ThreadList extends StatelessWidget {
             },
           ),
         ),
-        Positioned(
-          right: 16,
-          bottom: 20,
-          child: FloatingActionButton.small(
-            backgroundColor: AppColors.accent(context),
-            foregroundColor: Colors.white,
-            heroTag: 'new_chat',
-            onPressed: onNewChat,
-            child: const Icon(Icons.edit),
-          ),
-        ),
       ],
     );
   }
@@ -589,17 +599,6 @@ class _ChannelList extends StatelessWidget {
                   },
                 ),
         ),
-        Positioned(
-          right: 16,
-          bottom: 20,
-          child: FloatingActionButton.small(
-            backgroundColor: AppColors.accent(context),
-            foregroundColor: Colors.white,
-            heroTag: 'new_channel',
-            onPressed: onCreate,
-            child: const Icon(Icons.edit),
-          ),
-        ),
       ],
     );
   }
@@ -668,17 +667,6 @@ class _GroupList extends StatelessWidget {
                     );
                   },
                 ),
-        ),
-        Positioned(
-          right: 16,
-          bottom: 20,
-          child: FloatingActionButton.small(
-            backgroundColor: AppColors.accent(context),
-            foregroundColor: Colors.white,
-            heroTag: 'new_group',
-            onPressed: onCreate,
-            child: const Icon(Icons.edit),
-          ),
         ),
       ],
     );

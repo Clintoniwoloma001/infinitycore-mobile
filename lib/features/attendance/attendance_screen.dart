@@ -139,7 +139,18 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     );
     final usable = await biometricService.isUsable();
     debugPrint('Attendance._verifyIdentity: biometricUsable=$usable');
-    if (session.enforced == true && usable && !session.biometricEnabled) {
+    // "Has this person already set biometrics up?" is answered by the durable
+    // setup state, NOT by the server's cached link flag. Reading the cache here
+    // is what made a user who had already enrolled a fingerprint and linked the
+    // device be told to "go to Profile → Biometric attendance" on every single
+    // clock action: the flag is only refreshed by mobile_device_validate, so a
+    // failed or not-yet-run refresh looked identical to never having set up.
+    final alreadySetup = await biometricService.hasCompletedSetup();
+    debugPrint(
+      'Attendance._verifyIdentity: alreadySetup=$alreadySetup '
+      'serverLinked=${session.biometricEnabled}',
+    );
+    if (session.enforced == true && usable && !alreadySetup) {
       if (!mounted) return (allow: false, biometricUsed: false);
       await showDialog<void>(
         context: context,
@@ -148,12 +159,35 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           title: const Text('Biometric attendance required'),
           content: const Text(
             'This device must be biometrically authorized before you can record '
-            'attendance. Go to Profile → Biometric attendance to set it up.',
+            'attendance. Set it up now, or continue later from Profile → '
+            'Biometric attendance.',
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('Got it'),
+              child: const Text('Later'),
+            ),
+            // Offer the fix here rather than only describing where to find it.
+            // A dialog that names a screen the user may not be able to reach is
+            // a dead end; this links the device and returns to the clock action
+            // the user was already trying to complete.
+            FilledButton(
+              onPressed: () async {
+                // Capture the messenger before awaiting: reaching a BuildContext
+                // after an async gap is what use_build_context_synchronously
+                // guards against, and the dialog's own context is popped here.
+                final messenger = ScaffoldMessenger.of(ctx);
+                Navigator.of(ctx).pop();
+                final linked = await _linkBiometricNow();
+                if (!linked) return;
+                messenger.showSnackBar(
+                  const SnackBar(
+                    content: Text('Biometrics enabled. Tap the clock action again.'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              },
+              child: const Text('Set up now'),
             ),
           ],
         ),
@@ -210,6 +244,36 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     return (allow: true, biometricUsed: true);
   }
 
+  /// Links this device for biometric attendance, from the attendance screen.
+  ///
+  /// Mirrors Profile → Biometric attendance so there is exactly one definition of
+  /// "setup is complete": a successful native assertion, the server link, the
+  /// server assertion record, and the durable local preference. Returns whether
+  /// every step succeeded, so the caller can tell the user the truth instead of
+  /// assuming success.
+  Future<bool> _linkBiometricNow() async {
+    final session = MobileSessionService.instance;
+    try {
+      final ok = await biometricService.authenticate(
+        reason: 'Enable biometric attendance for InfinityCore',
+      );
+      if (!ok) {
+        _fail(StateError('Biometric verification failed or was cancelled.'));
+        return false;
+      }
+      await session.linkBiometric();
+      await session.authenticateBiometric(true);
+      // The local preference is what stops this dialog reappearing, so it is
+      // written last: a failure above must not leave a half-completed state
+      // that suppresses the prompt forever.
+      await AuthService.instance.setBiometricEnabled(true);
+      return true;
+    } catch (e) {
+      _fail(StateError('Could not enable biometrics: $e'));
+      return false;
+    }
+  }
+
   Future<void> _clockIn() async {
     debugPrint(
       'Attendance._clockIn: busy=$_busy employee=${_employee == null} terminal=$_terminalId',
@@ -234,13 +298,11 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         _today = record ?? _today;
         _position = location.position;
       });
-      await NotificationService.instance.show(
-        id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-        title: 'Clocked In',
-        body: (result['late_minutes'] ?? 0) > 0
+      await NotificationService.instance.showAttendanceConfirmation(
+        clockedIn: true,
+        detail: (result['late_minutes'] ?? 0) > 0
             ? 'You clocked in ${result['late_minutes']} minutes late today.'
             : 'You are clocked in. Have a productive day!',
-        route: '/home',
       );
       _success('Clocked in. Have a productive day!');
       _load();
@@ -269,11 +331,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       );
       if (!mounted) return;
       setState(() => _position = location.position);
-      await NotificationService.instance.show(
-        id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-        title: 'Clocked Out',
-        body: 'You worked ${result['work_hours'] ?? '—'} hours today.',
-        route: '/home',
+      await NotificationService.instance.showAttendanceConfirmation(
+        clockedIn: false,
+        detail: 'You worked ${result['work_hours'] ?? '—'} hours today.',
       );
       _success('Clocked out. See you next time!');
       _load();
@@ -820,8 +880,11 @@ class _SecurityStatusLines extends StatelessWidget {
   Widget build(BuildContext context) {
     final session = MobileSessionService.instance;
     final enforced = session.enforced == true;
+    // Same rule as the clock gate: setup is a durable fact, not a cache value.
+    // Showing an unchecked box beside a correctly-enabled fingerprint is the
+    // same confusing contradiction the gate had.
     final biometricOk = enforced
-        ? session.biometricEnabled
+        ? (session.biometricEnabled || AuthService.instance.biometricEnabled)
         : AuthService.instance.biometricEnabled;
     final locationOk = geoStatus == 'ok';
 

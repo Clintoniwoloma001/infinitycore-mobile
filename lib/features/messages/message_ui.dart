@@ -329,6 +329,7 @@ class MessageBubble extends StatelessWidget {
     this.acks = const [],
     this.needsMyAck = false,
     this.onAcknowledge,
+    this.nameFor,
   });
 
   final Map<String, dynamic> message;
@@ -340,9 +341,16 @@ class MessageBubble extends StatelessWidget {
   final VoidCallback onLongPress;
   final void Function(String emoji, bool mine) onToggleReaction;
 
-  /// `chat_message_acks` rows for this message, used for the "N acknowledged"
-  /// tally the sender sees.
+  /// `chat_message_acks` rows for this message, used for the "N of M
+  /// acknowledged" tally and the per-recipient roster the sender can open.
   final List<Map<String, dynamic>> acks;
+
+  /// Resolves a `user_id` to a display name for the acknowledgment roster.
+  ///
+  /// `chat_message_acks` stores only ids, so without this the roster would list
+  /// raw UUIDs. Optional: the roster falls back to a neutral label when the
+  /// directory has not resolved a name.
+  final String? Function(String userId)? nameFor;
 
   /// True when this message demands the local user's acknowledgment and they
   /// have not given it yet. The button is rendered inline so the user can
@@ -454,7 +462,10 @@ class MessageBubble extends StatelessWidget {
                     if (requiresAck && acks.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 5),
-                        child: _AckTally(count: acks.length, onMine: isMine),
+                        child: _AckTally(
+                          acks: acks,
+                          nameFor: nameFor,
+                        ),
                       ),
                     const SizedBox(height: 3),
                     Row(
@@ -575,26 +586,186 @@ class _InlineAckPrompt extends StatelessWidget {
   }
 }
 
-/// "N acknowledged" tally, shown on a message that required confirmation.
+/// "N of M acknowledged" tally, shown on a message that required confirmation.
+///
+/// Counts only rows whose status is `acknowledged`. `send_rich_message`
+/// pre-seeds one row per recipient in `pending` state, so tallying the row
+/// count reported a freshly-sent group message as fully acknowledged the
+/// instant it went out, and stayed there no matter who had actually complied.
+/// That is exactly the "it cleared as soon as one person acknowledged it"
+/// behaviour: the obligation is per member, and it clears per member.
 class _AckTally extends StatelessWidget {
-  const _AckTally({required this.count, required this.onMine});
+  const _AckTally({required this.acks, this.nameFor});
 
-  final int count;
-  final bool onMine;
+  final List<Map<String, dynamic>> acks;
+  final String? Function(String userId)? nameFor;
+
+  /// Statuses that count as a completed acknowledgment.
+  static bool _isDone(Map<String, dynamic> row) =>
+      '${row['status'] ?? 'acknowledged'}'.toLowerCase() == 'acknowledged';
 
   @override
   Widget build(BuildContext context) {
-    final color = onMine ? Colors.white70 : AppColors.textTertiary(context);
-    return Row(
+    final total = acks.length;
+    var done = 0;
+    for (final row in acks) {
+      if (_isDone(row)) done++;
+    }
+    final outstanding = total - done;
+    final settled = outstanding == 0;
+    final color = settled ? AppColors.green : AppColors.amber;
+    final label = settled
+        ? total == 1
+              ? 'Acknowledged'
+              : 'All $total acknowledged'
+        : '$done of $total acknowledged · $outstanding pending';
+    // Tappable so the sender can see WHO is still outstanding, not just how
+    // many. Without this the count is unactionable: a manager cannot tell which
+    // colleague to chase, which is the whole point of a group acknowledgment.
+    final chip = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Icon(Icons.how_to_reg_outlined, size: 12),
+        Icon(
+          settled ? Icons.how_to_reg : Icons.how_to_reg_outlined,
+          size: 12,
+          color: color,
+        ),
         const SizedBox(width: 4),
-        Text(
-          count == 1 ? '1 acknowledged' : '$count acknowledged',
-          style: TextStyle(fontSize: 10, color: color),
+        Flexible(
+          child: Text(
+            label,
+            style: TextStyle(fontSize: 10, color: color),
+          ),
         ),
       ],
+    );
+    if (total <= 1) return chip;
+    return InkWell(
+      onTap: () => _showRoster(context),
+      borderRadius: BorderRadius.circular(6),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+        child: chip,
+      ),
+    );
+  }
+
+  /// Lists each recipient's state so a group message is demonstrably
+  /// outstanding until every member has acknowledged it.
+  Future<void> _showRoster(BuildContext context) {
+    final acked = <Map<String, dynamic>>[];
+    final pending = <Map<String, dynamic>>[];
+    for (final row in acks) {
+      (_isDone(row) ? acked : pending).add(row);
+    }
+    String nameOf(Map<String, dynamic> row) {
+      final id = '${row['user_id'] ?? ''}';
+      final resolved = nameFor?.call(id)?.trim() ?? '';
+      if (resolved.isNotEmpty) return resolved;
+      if (id.isEmpty) return 'Unknown member';
+      // Prefer a readable name, never a raw UUID as the primary label.
+      return 'Member ${id.substring(0, id.length < 8 ? id.length : 8)}';
+    }
+
+    return showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Acknowledgment status',
+                  style: Theme.of(sheetContext).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${acked.length} of $acks.length members have acknowledged. '
+                  'This message stays outstanding until every member confirms.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary(sheetContext),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                if (pending.isNotEmpty) ...[
+                  _RosterHeader(
+                    label: 'Still outstanding (${pending.length})',
+                    color: AppColors.amber,
+                  ),
+                  const SizedBox(height: 6),
+                  for (final row in pending)
+                    ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(
+                        Icons.schedule,
+                        size: 18,
+                        color: AppColors.amber,
+                      ),
+                      title: Text(
+                        nameOf(row),
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                    ),
+                  const SizedBox(height: 10),
+                ],
+                if (acked.isNotEmpty) ...[
+                  _RosterHeader(
+                    label: 'Acknowledged (${acked.length})',
+                    color: AppColors.green,
+                  ),
+                  const SizedBox(height: 6),
+                  for (final row in acked)
+                    ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(
+                        Icons.how_to_reg,
+                        size: 18,
+                        color: AppColors.green,
+                      ),
+                      title: Text(
+                        nameOf(row),
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                      subtitle: row['acknowledged_at'] == null
+                          ? null
+                          : Text(
+                              Fmt.dateTime('${row['acknowledged_at']}'),
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                    ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Section heading inside the acknowledgment roster.
+class _RosterHeader extends StatelessWidget {
+  const _RosterHeader({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label,
+      style: TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
+        color: color,
+      ),
     );
   }
 }

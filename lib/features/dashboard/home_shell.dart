@@ -12,6 +12,7 @@ import '../messages/messages_screen.dart';
 import '../messages/urgent_ack_service.dart';
 import '../sara/sara_mark.dart';
 import 'app_menu.dart';
+import 'host_fab.dart';
 
 class _TabDef {
   const _TabDef(this.label, this.icon, this.selectedIcon, this.screen);
@@ -36,6 +37,9 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
 
+  /// Slot the active tab publishes its own compose button into.
+  final ValueNotifier<Widget?> _hostFab = ValueNotifier<Widget?>(null);
+
   @override
   void initState() {
     super.initState();
@@ -50,6 +54,11 @@ class _HomeShellState extends State<HomeShell> {
   void dispose() {
     AuthTrace.log('home', 'HomeShell dispose — Home removed from tree');
     HomeShell.requestTab.removeListener(_onTabRequest);
+    // Drop the tab's button and stop pointing at a disposed notifier, so a late
+    // publish from a torn-down tab cannot write to freed state.
+    _hostFab.value = null;
+    if (HostFabScope.current == _hostFab) HostFabScope.detach();
+    _hostFab.dispose();
     super.dispose();
   }
 
@@ -112,7 +121,12 @@ class _HomeShellState extends State<HomeShell> {
       (t) => t.label.toLowerCase() == wanted ||
           t.label.toLowerCase().startsWith(wanted),
     );
-    if (i >= 0) setState(() => _index = i);
+    if (i >= 0 && i != _index) {
+      // The outgoing tab may own the compose button. Clear it so the incoming
+      // tab starts from a clean slot instead of inheriting a stale one.
+      _hostFab.value = null;
+      setState(() => _index = i);
+    }
   }
 
   @override
@@ -126,18 +140,42 @@ class _HomeShellState extends State<HomeShell> {
         showBackButton: false,
         actionsExtra: appHeaderActions(context),
       ),
-      body: IndexedStack(
-        index: index,
-        children: [for (final t in tabs) t.screen],
+      // The scope lets the visible tab publish its own compose button into the
+      // FAB slot below, so the tab's action and the SARA mark stack instead of
+      // fighting for the same corner.
+      body: HostFabScope(
+        notifier: _hostFab,
+        child: IndexedStack(index: index, children: [for (final t in tabs) t.screen]),
       ),
       // SARA stays one tap away from every tab as a chat bubble.
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => context.push('/sara'),
-        backgroundColor: AppColors.brandTint(context, AppColors.orange),
-        foregroundColor: AppColors.accent(context),
-        tooltip: 'Ask SARA',
-        elevation: 2,
-        child: const SaraMark(size: 26),
+      //
+      // A screen-hosted FAB is rendered BELOW the SARA mark rather than
+      // underneath it. Messages, and any future tab with its own compose
+      // action, publishes one through [HostFabScope]; both are painted in this
+      // single Scaffold slot so the two can never overlap. Positioning the
+      // compose button inside its own screen's Stack could not achieve that:
+      // the shell's FAB floats above the whole body, so it always sat on top of
+      // (and swallowed the tap of) the screen's own button.
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          ValueListenableBuilder<Widget?>(
+            valueListenable: HostFabScope.current,
+            builder: (context, hostFab, _) =>
+                hostFab ?? const SizedBox.shrink(),
+          ),
+          const SizedBox(height: 12),
+          FloatingActionButton(
+            heroTag: 'sara_fab',
+            onPressed: () => context.push('/sara'),
+            backgroundColor: AppColors.brandTint(context, AppColors.orange),
+            foregroundColor: AppColors.accent(context),
+            tooltip: 'Ask SARA',
+            elevation: 2,
+            child: const SaraMark(size: 26),
+          ),
+        ],
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,

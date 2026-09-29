@@ -111,6 +111,26 @@ class _ChatScreenState extends State<ChatScreen> {
         for (final row in await CommunicationService.instance.acksFor(ids)) {
           acks.putIfAbsent('${row['message_id']}', () => []).add(row);
         }
+        // Ack recipients are group members who may never have posted in this
+        // thread, so they are absent from the sender list resolved above.
+        // Resolve them too, otherwise the outstanding roster shows raw ids
+        // instead of names — exactly the people a sender most needs to identify.
+        final ackUserIds = {
+          for (final rows in acks.values)
+            for (final row in rows) '${row['user_id'] ?? ''}',
+        }..removeWhere((id) => id.isEmpty || dir.containsKey(id));
+        if (ackUserIds.isNotEmpty) {
+          try {
+            dir = {
+              ...dir,
+              ...await CommunicationService.instance.resolveDirectory(
+                ackUserIds.toList(),
+              ),
+            };
+          } catch (_) {
+            // Names are cosmetic here; the roster falls back to a short id.
+          }
+        }
       } catch (_) {}
 
       try {
@@ -269,11 +289,32 @@ class _ChatScreenState extends State<ChatScreen> {
       for (final row in await CommunicationService.instance.acksFor(ids)) {
         acks.putIfAbsent('${row['message_id']}', () => []).add(row);
       }
+      // Resolve any ack recipients still missing from the directory. This runs
+      // after every acknowledgment, which is exactly when the sender is most
+      // likely to open the roster, so a name gap here would be visible.
+      final missing = {
+        for (final rows in acks.values)
+          for (final row in rows) '${row['user_id'] ?? ''}',
+      }..removeWhere((id) => id.isEmpty || _directory.containsKey(id));
+      var merged = _directory;
+      if (missing.isNotEmpty) {
+        try {
+          merged = {
+            ..._directory,
+            ...await CommunicationService.instance.resolveDirectory(
+              missing.toList(),
+            ),
+          };
+        } catch (_) {
+          // Cosmetic; the roster falls back to a short id.
+        }
+      }
       if (mounted) {
         setState(() {
           _reactions = reactions;
           _attachments = attachments;
           _acks = acks;
+          _directory = merged;
         });
       }
     } catch (_) {
@@ -674,6 +715,9 @@ class _ChatScreenState extends State<ChatScreen> {
       myUserId: _me,
       acks: acks,
       needsMyAck: needsMyAck,
+      // The roster must name real people: `chat_message_acks` holds only ids,
+      // and an outstanding list of UUIDs is not actionable for a sender.
+      nameFor: (id) => '${_directory[id]?['full_name'] ?? ''}',
       onAcknowledge: needsMyAck
           ? () => _acknowledge(m)
           : null,

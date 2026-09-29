@@ -1,6 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:local_auth/local_auth.dart';
 
+import 'auth_service.dart';
+import 'mobile_session_service.dart';
+
 /// Explicit compile-time switch for integration/automation runs.
 ///
 /// When `ATTENDANCE_TEST_MODE=true` the attendance flow uses the deterministic
@@ -31,6 +34,21 @@ abstract class BiometricAttendanceService {
   /// server (iOS/Android capable devices only).
   Future<bool> isAuthorized();
 
+  /// True when the user has ALREADY completed biometric setup for this device.
+  ///
+  /// The attendance gate used to treat "not linked on the server" as "never set
+  /// up", so a user who had enrolled a fingerprint and linked it once was asked
+  /// to configure it again on every clock action. The server flag is a cache
+  /// that can legitimately be false — it is only refreshed by
+  /// `mobile_device_validate`, and that call fails or returns a stale session
+  /// on a flaky connection or before the first refresh of the day.
+  ///
+  /// The user's own recorded preference is the durable signal: it is written
+  /// once in Profile → Biometric attendance and survives reinstalls of state,
+  /// offline periods and failed refreshes. When the two disagree, the durable
+  /// local preference wins, because a false "you have not set this up" is the
+  /// failure mode that actually annoys people.
+  Future<bool> hasCompletedSetup();
   /// Perform a native biometric assertion. Returns true on success.
   Future<bool> authenticate({
     String reason = 'Confirm your identity to record attendance',
@@ -82,6 +100,14 @@ class RealBiometricAttendanceService implements BiometricAttendanceService {
 
   @override
   Future<bool> isAuthorized() => Future.value(true);
+
+  @override
+  Future<bool> hasCompletedSetup() async {
+    // Either durable signal counts as "already set up": the user's own
+    // preference, or the server having linked this device at some point.
+    if (AuthService.instance.biometricEnabled) return true;
+    return MobileSessionService.instance.biometricEnabled;
+  }
 
   @override
   Future<bool> authenticate({
@@ -148,6 +174,9 @@ class MockBiometricAttendanceService implements BiometricAttendanceService {
 
   @override
   Future<bool> isAuthorized() async => true;
+
+  @override
+  Future<bool> hasCompletedSetup() async => true;
 
   @override
   Future<bool> authenticate({

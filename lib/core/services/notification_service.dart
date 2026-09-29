@@ -61,6 +61,13 @@ class NotificationService {
   static const reminderClockInId = 901;
   static const reminderClockOutId = 902;
 
+  /// Fixed ids for the clock-in / clock-out confirmations.
+  ///
+  /// Stable per direction so a repeated punch replaces its own notification
+  /// rather than adding another banner to the shade.
+  static const attendanceClockedInId = 911;
+  static const attendanceClockedOutId = 912;
+
   /// Android channel ids. Messaging and announcements are separated so a user
   /// can silence routine chat without losing official notices.
   static const channelMessages = 'infinitycore_messages';
@@ -219,6 +226,19 @@ class NotificationService {
     }
   }
 
+  /// User-visible name for [channelId].
+  ///
+  /// The reminder channel is not a separate hard-coded case because
+  /// `_ensureReminderChannel` already registers it with its own name; reusing
+  /// that definition keeps the notification consistent with the channel the
+  /// user sees in Android settings.
+  String _channelName(String channel) {
+    if (channel == _reminderChannel.id) return _reminderChannel.name;
+    if (channel == channelAnnouncements) return 'Announcements';
+    if (channel == channelMessages) return 'Messages';
+    return 'InfinityCore';
+  }
+
   /// Creates (or re-confirms) the alarm channel. Returns false when the channel
   /// could not be registered, which means reminders would degrade to a normal
   /// notification.
@@ -240,6 +260,40 @@ class NotificationService {
     }
   }
 
+  /// Confirms a completed clock-in or clock-out.
+  ///
+  /// Posted on the *alarm* channel rather than the routine default one. The
+  /// routine channel is created at first launch with default importance, and
+  /// Android freezes a channel's importance, sound and audio usage at creation
+  /// time — so a confirmation sent there is silent on any phone whose owner (or
+  /// OEM skin) has ever lowered that channel, and no later code change can fix
+  /// it. Attendance confirmation is exactly the event that must not be missed,
+  /// so it uses the same alarm-grade path as the reminders.
+  ///
+  /// This is a *local* notification, so it is posted the moment the server has
+  /// accepted the punch. It therefore fires whether or not the app is in the
+  /// foreground; it cannot fire while the process is dead and the user has not
+  /// opened the app, because there is no push transport — that is what the
+  /// scheduled clock-in/clock-out reminders are for.
+  Future<void> showAttendanceConfirmation({
+    required bool clockedIn,
+    String? detail,
+  }) {
+    return show(
+      // Stable per direction so a retry replaces the previous confirmation
+      // instead of stacking a second identical banner in the shade.
+      id: clockedIn ? attendanceClockedInId : attendanceClockedOutId,
+      title: clockedIn ? 'Clocked in' : 'Clocked out',
+      body: detail ??
+          (clockedIn
+              ? 'Your clock-in was recorded.'
+              : 'Your clock-out was recorded.'),
+      route: '/home',
+      channel: channelReminders,
+      highPriority: true,
+    );
+  }
+
   /// Shows an immediate in-app notification through the existing local
   /// notification system.
   ///
@@ -256,6 +310,11 @@ class NotificationService {
     bool highPriority = false,
   }) async {
     await init();
+    // The alarm channel must exist before anything is posted to it. Android
+    // silently downgrades a post to an unregistered channel, which is how an
+    // alarm-grade clock-in/out confirmation could end up silent.
+    final isAlarmChannel = channel == channelReminders;
+    if (isAlarmChannel) await _ensureReminderChannel();
     try {
       await _plugin.show(
         id,
@@ -264,17 +323,37 @@ class NotificationService {
         NotificationDetails(
           android: AndroidNotificationDetails(
             channel,
-            channel == channelAnnouncements
-                ? 'Announcements'
-                : channel == channelMessages
-                ? 'Messages'
-                : 'InfinityCore',
-            channelDescription:
-                'Messages, announcements and operational alerts',
-            importance: highPriority
+            _channelName(channel),
+            channelDescription: isAlarmChannel
+                ? _reminderChannel.description
+                : 'Messages, announcements and operational alerts',
+            importance: isAlarmChannel
+                // The channel's own importance is what Android honours; raising
+                // importance on the post alone will not sound on a muted phone.
+                ? Importance.max
+                : highPriority
                 ? Importance.high
                 : Importance.defaultImportance,
-            priority: highPriority ? Priority.high : Priority.defaultPriority,
+            priority: isAlarmChannel
+                ? Priority.max
+                : highPriority
+                ? Priority.high
+                : Priority.defaultPriority,
+            // Alarm audio usage routes the sound through the alarm volume
+            // stream, so it still sounds in silent and vibrate mode.
+            audioAttributesUsage: isAlarmChannel
+                ? AudioAttributesUsage.alarm
+                : AudioAttributesUsage.notification,
+            category: isAlarmChannel
+                ? AndroidNotificationCategory.alarm
+                : AndroidNotificationCategory.message,
+            playSound: true,
+            enableVibration: true,
+            // The confirmation is a receipt, not a persistent alarm: it stays
+            // dismissible so it cannot sit in the shade looking unfinished.
+            ongoing: false,
+            autoCancel: true,
+            visibility: NotificationVisibility.public,
             icon: 'ic_launcher_foreground',
           ),
           iOS: DarwinNotificationDetails(
