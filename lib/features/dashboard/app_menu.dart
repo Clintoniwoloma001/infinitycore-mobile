@@ -78,10 +78,7 @@ Future<void> showAppMenu(BuildContext context) {
           ),
           for (final action in actions)
             ListTile(
-              leading: Icon(
-                action.icon,
-                color: AppColors.accent(sheetContext),
-              ),
+              leading: Icon(action.icon, color: AppColors.accent(sheetContext)),
               title: Text(
                 action.label,
                 style: TextStyle(
@@ -274,4 +271,3 @@ List<Widget> appHeaderActions(BuildContext context) => const [
   NotificationBellButton(),
   AppMenuButton(),
 ];
-

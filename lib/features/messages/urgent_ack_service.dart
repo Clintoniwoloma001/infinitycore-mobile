@@ -99,9 +99,8 @@ class UrgentAckService with WidgetsBindingObserver {
   /// second reminder replaces the first instead of stacking up.
   static const reminderNotificationId = 8801;
 
-  final ValueNotifier<List<PendingAck>> pending = ValueNotifier<
-    List<PendingAck>
-  >(const []);
+  final ValueNotifier<List<PendingAck>> pending =
+      ValueNotifier<List<PendingAck>>(const []);
 
   /// Increments on every reminder fire. SARA and the Messages badge both listen
   /// so the spoken nudge and the system notification stay in lockstep.

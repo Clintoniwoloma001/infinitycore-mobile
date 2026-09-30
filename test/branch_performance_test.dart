@@ -96,14 +96,17 @@ void main() {
       expect(out, <String>['Bravo', 'Alpha', 'Unmeasured']);
     });
 
-    test('an explicit 0% branch sorts as a real score, ahead of unmeasured', () {
-      final withZero = [
-        _b(name: 'Zero', attendanceRate: 0),
-        _b(name: 'Unmeasured', attendanceRate: null),
-      ];
-      final out = BranchSort.attendanceAsc.apply(withZero).map((r) => r.name);
-      expect(out, <String>['Zero', 'Unmeasured']);
-    });
+    test(
+      'an explicit 0% branch sorts as a real score, ahead of unmeasured',
+      () {
+        final withZero = [
+          _b(name: 'Zero', attendanceRate: 0),
+          _b(name: 'Unmeasured', attendanceRate: null),
+        ];
+        final out = BranchSort.attendanceAsc.apply(withZero).map((r) => r.name);
+        expect(out, <String>['Zero', 'Unmeasured']);
+      },
+    );
 
     test('sorting by staff is stable and drops nothing', () {
       final out = BranchSort.byStaff.apply(rows).map((r) => r.name);
@@ -123,14 +126,21 @@ void main() {
     test('sort does not mutate the input', () {
       final input = List<BranchPerformance>.of(rows);
       BranchSort.byStaff.apply(input);
-      expect(input.map((r) => r.name), <String>['Alpha', 'Bravo', 'Unmeasured']);
+      expect(input.map((r) => r.name), <String>[
+        'Alpha',
+        'Bravo',
+        'Unmeasured',
+      ]);
     });
   });
 
   group('Sort identity', () {
-    test('equal key and direction compare equal, so the menu selection sticks', () {
-      expect(BranchSort.attendanceDesc, BranchSort.attendanceDesc);
-      expect(BranchSort.attendanceDesc, isNot(BranchSort.attendanceAsc));
-    });
+    test(
+      'equal key and direction compare equal, so the menu selection sticks',
+      () {
+        expect(BranchSort.attendanceDesc, BranchSort.attendanceDesc);
+        expect(BranchSort.attendanceDesc, isNot(BranchSort.attendanceAsc));
+      },
+    );
   });
 }

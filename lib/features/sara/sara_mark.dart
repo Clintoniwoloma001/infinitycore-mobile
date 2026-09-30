@@ -94,18 +94,12 @@ class _SaraMarkPainter extends CustomPainter {
       ..strokeWidth = side * 0.075
       ..strokeCap = StrokeCap.round;
     final left = Rect.fromCenter(
-      center: Offset(
-        centre.dx - glyphWidth / 2 + r,
-        centre.dy + side * 0.02,
-      ),
+      center: Offset(centre.dx - glyphWidth / 2 + r, centre.dy + side * 0.02),
       width: glyphHeight,
       height: glyphHeight,
     );
     final right = Rect.fromCenter(
-      center: Offset(
-        centre.dx + glyphWidth / 2 - r,
-        centre.dy + side * 0.02,
-      ),
+      center: Offset(centre.dx + glyphWidth / 2 - r, centre.dy + side * 0.02),
       width: glyphHeight,
       height: glyphHeight,
     );
@@ -118,7 +112,5 @@ class _SaraMarkPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_SaraMarkPainter old) =>
-      old.green != green ||
-      old.orange != orange ||
-      old.glyph != glyph;
+      old.green != green || old.orange != orange || old.glyph != glyph;
 }

@@ -249,9 +249,7 @@ class _MessagesScreenState extends State<MessagesScreen>
                 // instead of floating it here. The shell's SARA mark paints
                 // above the whole body, so a button positioned in this Stack
                 // was covered by it and could not be tapped.
-                HostFabPublisher(
-                  builder: (context) => _composeFab(context),
-                ),
+                HostFabPublisher(builder: (context) => _composeFab(context)),
                 _SearchBar(onChanged: (v) => setState(() => _query = v)),
                 TabBar(
                   controller: _tabs,

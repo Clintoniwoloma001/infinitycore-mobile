@@ -439,9 +439,7 @@ class MessageBubble extends StatelessWidget {
                     if (needsMyAck)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 6),
-                        child: _InlineAckPrompt(
-                          onAcknowledge: onAcknowledge,
-                        ),
+                        child: _InlineAckPrompt(onAcknowledge: onAcknowledge),
                       ),
                     for (final f in attachments)
                       Padding(
@@ -462,10 +460,7 @@ class MessageBubble extends StatelessWidget {
                     if (requiresAck && acks.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 5),
-                        child: _AckTally(
-                          acks: acks,
-                          nameFor: nameFor,
-                        ),
+                        child: _AckTally(acks: acks, nameFor: nameFor),
                       ),
                     const SizedBox(height: 3),
                     Row(
@@ -632,10 +627,7 @@ class _AckTally extends StatelessWidget {
         ),
         const SizedBox(width: 4),
         Flexible(
-          child: Text(
-            label,
-            style: TextStyle(fontSize: 10, color: color),
-          ),
+          child: Text(label, style: TextStyle(fontSize: 10, color: color)),
         ),
       ],
     );
@@ -761,11 +753,7 @@ class _RosterHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       label,
-      style: TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.w700,
-        color: color,
-      ),
+      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: color),
     );
   }
 }
@@ -781,8 +769,7 @@ class VoiceNoteTile extends StatelessWidget {
 
   final Map<String, dynamic> attachment;
 
-  String get _id =>
-      '${attachment['id'] ?? attachment['file_path'] ?? ''}';
+  String get _id => '${attachment['id'] ?? attachment['file_path'] ?? ''}';
 
   @override
   Widget build(BuildContext context) {
@@ -829,9 +816,7 @@ class VoiceNoteTile extends StatelessWidget {
                       ),
                     )
                   : Icon(
-                      playing
-                          ? Icons.pause_rounded
-                          : Icons.play_arrow_rounded,
+                      playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
                       color: Colors.white,
                       size: 20,
                     ),

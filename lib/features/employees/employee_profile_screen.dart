@@ -162,7 +162,10 @@ class _Row extends StatelessWidget {
             width: 130,
             child: Text(
               label,
-              style: TextStyle(fontSize: 12, color: AppColors.textTertiary(context)),
+              style: TextStyle(
+                fontSize: 12,
+                color: AppColors.textTertiary(context),
+              ),
             ),
           ),
           Expanded(

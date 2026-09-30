@@ -23,7 +23,8 @@ enum VoiceError {
     VoiceError.busy => 'A recording is already in progress.',
     VoiceError.tooShort => 'Hold to record for at least a second.',
     VoiceError.tooLong => 'Voice notes are limited to 5 minutes.',
-    VoiceError.failed => 'The recording could not be finished. Please try again.',
+    VoiceError.failed =>
+      'The recording could not be finished. Please try again.',
   };
 }
 
@@ -197,9 +198,11 @@ class VoiceRecorderService with ChangeNotifier {
         }),
       );
     }
-    unawaited(_recorder.dispose().catchError((Object e) {
-      debugPrint('[VoiceRecorderService] dispose: $e');
-    }));
+    unawaited(
+      _recorder.dispose().catchError((Object e) {
+        debugPrint('[VoiceRecorderService] dispose: $e');
+      }),
+    );
     super.dispose();
   }
 
@@ -293,9 +296,11 @@ class VoicePlaybackController extends ChangeNotifier {
     _loading = true;
     _error = null;
     _position = Duration.zero;
-    _duration = Duration(milliseconds: '${attachment['duration_ms'] ?? 0}'.isEmpty
-        ? 0
-        : int.tryParse('${attachment['duration_ms'] ?? 0}') ?? 0);
+    _duration = Duration(
+      milliseconds: '${attachment['duration_ms'] ?? 0}'.isEmpty
+          ? 0
+          : int.tryParse('${attachment['duration_ms'] ?? 0}') ?? 0,
+    );
     notifyListeners();
 
     try {
@@ -329,7 +334,8 @@ class VoicePlaybackController extends ChangeNotifier {
       }
     });
     _stateSub = _player.playerStateStream.listen((state) {
-      final nowPlaying = state.playing && state.processingState != ProcessingState.completed;
+      final nowPlaying =
+          state.playing && state.processingState != ProcessingState.completed;
       if (_playing != nowPlaying) {
         _playing = nowPlaying;
         notifyListeners();
@@ -368,4 +374,3 @@ String formatVoiceDuration(Duration d) {
   final seconds = d.inSeconds % 60;
   return '$minutes:${seconds.toString().padLeft(2, '0')}';
 }
-

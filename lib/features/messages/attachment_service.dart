@@ -127,13 +127,12 @@ String mimeTypeForPath(String path) {
     '.txt': 'text/plain',
     '.csv': 'text/csv',
     '.doc': 'application/msword',
-    '.docx':
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     '.xls': 'application/vnd.ms-excel',
-    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    '.xlsx':
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     '.ppt': 'application/vnd.ms-powerpoint',
-    '.pptx':
-        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
     '.zip': 'application/zip',
     '.m4a': 'audio/mp4',
     '.mp3': 'audio/mpeg',
@@ -212,11 +211,13 @@ class AttachmentUploadService {
       final bytes = await file.readAsBytes();
       onProgress?.call(0);
 
-      await SupabaseService.client.storage.from('documents').uploadBinary(
-        objectPath,
-        bytes,
-        fileOptions: const FileOptions(upsert: false),
-      );
+      await SupabaseService.client.storage
+          .from('documents')
+          .uploadBinary(
+            objectPath,
+            bytes,
+            fileOptions: const FileOptions(upsert: false),
+          );
 
       onProgress?.call(1);
       attachment

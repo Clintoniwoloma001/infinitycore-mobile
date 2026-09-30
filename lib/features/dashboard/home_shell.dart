@@ -118,7 +118,8 @@ class _HomeShellState extends State<HomeShell> {
       _ => tab.toLowerCase(),
     };
     final i = _tabs.indexWhere(
-      (t) => t.label.toLowerCase() == wanted ||
+      (t) =>
+          t.label.toLowerCase() == wanted ||
           t.label.toLowerCase().startsWith(wanted),
     );
     if (i >= 0 && i != _index) {
@@ -145,7 +146,10 @@ class _HomeShellState extends State<HomeShell> {
       // fighting for the same corner.
       body: HostFabScope(
         notifier: _hostFab,
-        child: IndexedStack(index: index, children: [for (final t in tabs) t.screen]),
+        child: IndexedStack(
+          index: index,
+          children: [for (final t in tabs) t.screen],
+        ),
       ),
       // SARA stays one tap away from every tab as a chat bubble.
       //
@@ -188,17 +192,10 @@ class _HomeShellState extends State<HomeShell> {
               // A pending mandatory acknowledgment is a compliance obligation,
               // not a nicety, so it gets a persistent dot on the tab rather than
               // only living inside the Messages screen the user may not open.
-              icon: _badgeFor(
-                t.label,
-                Icon(t.icon),
-                t.label == 'Messages',
-              ),
+              icon: _badgeFor(t.label, Icon(t.icon), t.label == 'Messages'),
               selectedIcon: _badgeFor(
                 t.label,
-                Icon(
-                  t.selectedIcon,
-                  color: AppColors.accent(context),
-                ),
+                Icon(t.selectedIcon, color: AppColors.accent(context)),
                 t.label == 'Messages',
               ),
               label: t.label,

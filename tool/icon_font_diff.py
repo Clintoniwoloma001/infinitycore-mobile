@@ -8,6 +8,7 @@ mapped to a glyph already in the shipped font, or shipped in a new release.
 
 Usage: icon_font_diff.py <baseline.otf> <new.otf>
 """
+import re
 import struct
 import sys
 
@@ -60,3 +61,43 @@ print('new glyphs:     ', len(b))
 added = sorted(b - a)
 print('ADDED (%d): %s' % (len(added), added))
 print('REMOVED (%d): %s' % (len(sorted(a - b)), sorted(a - b)))
+
+# Name the differing codepoints, because a raw codepoint is not actionable.
+# icons.dart is the SDK's own table, so this is authoritative rather than a
+# hand-maintained list that could itself drift.
+if '--names' in sys.argv:
+    icons_dart = sys.argv[sys.argv.index('--names') + 1]
+    table = {}
+    decl = re.compile(
+        r'static const IconData (\w+)\s*=\s*IconData\(\s*(0x[0-9a-fA-F]+)',
+    )
+    with open(icons_dart, encoding='utf-8', errors='ignore') as fh:
+        for line in fh:
+            m = decl.search(line)
+            if m:
+                table.setdefault(int(m.group(2), 16), []).append(m.group(1))
+
+    def describe(cps):
+        for cp in cps:
+            print('  %s 0x%05x  %s' % (
+                'IN FONT' if cp in a else 'NOT IN FONT', cp,
+                ', '.join(table.get(cp, ['<no SDK icon with this codepoint>'])),
+            ))
+
+    if added:
+        print('\n-- ADDED codepoints (block a patch) --')
+        describe(added)
+    removed = sorted(a - b)
+    if removed:
+        print('\n-- REMOVED codepoints (also a change) --')
+        describe(removed)
+
+    # Which named icons would be safe substitutes for the blocked ones?
+    if '--candidates' in sys.argv:
+        print('\n-- safe substitutes already IN the baseline font --')
+        safe = sorted(
+            name for cp, names in table.items()
+            if cp in a for name in names
+        )
+        for name in safe:
+            print('  %s' % name)

@@ -284,7 +284,8 @@ class NotificationService {
       // instead of stacking a second identical banner in the shade.
       id: clockedIn ? attendanceClockedInId : attendanceClockedOutId,
       title: clockedIn ? 'Clocked in' : 'Clocked out',
-      body: detail ??
+      body:
+          detail ??
           (clockedIn
               ? 'Your clock-in was recorded.'
               : 'Your clock-out was recorded.'),
@@ -649,4 +650,3 @@ DateTime nextWeekdayOccurrence(DateTime from, int hour, int minute) {
   }
   return candidate;
 }
-

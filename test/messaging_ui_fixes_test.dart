@@ -11,36 +11,31 @@ void main() {
 
   // Comments explain the intent and legitimately name the table, so strip
   // them before asserting on CODE.
-  String code(String src) => src
-      .split('\n')
-      .where((l) => !l.trimLeft().startsWith('//'))
-      .join('\n');
+  String code(String src) =>
+      src.split('\n').where((l) => !l.trimLeft().startsWith('//')).join('\n');
 
-  final messages = File(
-    'lib/features/messages/create_sheets.dart',
-  ).readAsStringSync();
+  final messages = File('lib/features/messages/create_sheets.dart')
+      .readAsStringSync();
   final notifications = File(
     'lib/features/notifications/notifications_screen.dart',
   ).readAsStringSync();
-  final conversation = File(
-    'lib/features/messages/conversation_screen.dart',
-  ).readAsStringSync();
-  final chatScreen = File(
-    'lib/features/messages/chat_screen.dart',
-  ).readAsStringSync();
-  final gate = File(
-    'lib/features/messages/urgent_ack_gate.dart',
-  ).readAsStringSync();
-  final ackService = File(
-    'lib/features/messages/acknowledgement_service.dart',
-  ).readAsStringSync();
+  final conversation = File('lib/features/messages/conversation_screen.dart')
+      .readAsStringSync();
+  final chatScreen = File('lib/features/messages/chat_screen.dart')
+      .readAsStringSync();
+  final gate = File('lib/features/messages/urgent_ack_gate.dart')
+      .readAsStringSync();
+  final ackService = File('lib/features/messages/acknowledgement_service.dart')
+      .readAsStringSync();
 
   group('acknowledgement parity — groups/channels behave like DMs', () {
     test('the group/channel screen loads acknowledgment rows', () {
       // The parity defect: chat_screen did this and conversation_screen did
       // not, so a recipient opening the GROUP on mobile saw no acknowledge
       // control on the message while the web client showed one.
-      assert(conversation.contains('CommunicationService.instance.acksFor(ids)'));
+      assert(
+        conversation.contains('CommunicationService.instance.acksFor(ids)'),
+      );
     });
 
     test('the group/channel screen offers the inline acknowledge control', () {
@@ -83,9 +78,7 @@ void main() {
 
   group('the reminder is global, not scoped to one conversation', () {
     test('it is mounted above the router so every route shows it', () {
-      final app = File(
-        'lib/app/infinity_core_app.dart',
-      ).readAsStringSync();
+      final app = File('lib/app/infinity_core_app.dart').readAsStringSync();
       assert(app.contains('UrgentAckGate(child:'));
     });
 
@@ -102,9 +95,8 @@ void main() {
     test('dismissal is recorded in the service, not the widget', () {
       // The dismissal state must outlive the banner widget, otherwise it would
       // be forgotten on the next rebuild and could never actually hide it.
-      final service = File(
-        'lib/features/messages/urgent_ack_service.dart',
-      ).readAsStringSync();
+      final service = File('lib/features/messages/urgent_ack_service.dart')
+          .readAsStringSync();
       expect(service.contains('void dismissUntil'), isTrue);
       expect(service.contains('_dismissedUntil'), isTrue);
       expect(service.contains('_armResurface'), isTrue);
@@ -121,9 +113,8 @@ void main() {
 
     test('dismissal never acknowledges', () {
       // A dismissal must not be able to discharge a compliance obligation.
-      final service = File(
-        'lib/features/messages/urgent_ack_service.dart',
-      ).readAsStringSync();
+      final service = File('lib/features/messages/urgent_ack_service.dart')
+          .readAsStringSync();
       final block = service.split('void dismissUntil')[1].split('void ')[0];
       assert(!block.contains('acknowledge'));
       assert(!block.contains('SupabaseService'));
@@ -165,8 +156,8 @@ void main() {
     });
 
     test('the sheets use the theme-aware surface token instead', () {
-      final surfaceUses =
-          'backgroundColor: AppColors.surface(context),'.allMatches(messages);
+      final surfaceUses = 'backgroundColor: AppColors.surface(context),'
+          .allMatches(messages);
       expect(
         surfaceUses.length,
         greaterThanOrEqualTo(4),
@@ -178,16 +169,16 @@ void main() {
       // What is legitimately left: the spinner glyph and text inside a filled
       // accent-coloured button, and unread badge counts. Those are foreground-
       // on-colour and stay readable in dark mode by construction.
-      final offenders = RegExp(
-        r'color:\s*Colors\.white',
-      ).allMatches(messages).where((m) {
-        final before = messages.substring(0, m.start);
-        // Look back over the enclosing widget for a filled accent.
-        final window = before.split('\n').reversed.take(14).join('\n');
-        return !window.contains('CircularProgressIndicator') &&
-            !window.contains('backgroundColor: AppColors.accent') &&
-            !window.contains('Colors.white');
-      });
+      final offenders = RegExp(r'color:\s*Colors\.white')
+          .allMatches(messages)
+          .where((m) {
+            final before = messages.substring(0, m.start);
+            // Look back over the enclosing widget for a filled accent.
+            final window = before.split('\n').reversed.take(14).join('\n');
+            return !window.contains('CircularProgressIndicator') &&
+                !window.contains('backgroundColor: AppColors.accent') &&
+                !window.contains('Colors.white');
+          });
       expect(
         offenders.isEmpty,
         isTrue,
@@ -209,23 +200,26 @@ void main() {
         isFalse,
         reason: 'mark-all-read must not touch acknowledgment records',
       );
-      expect(
-        code(notifications).contains("status': 'acknowledged'"),
-        isFalse,
-      );
+      expect(code(notifications).contains("status': 'acknowledged'"), isFalse);
     });
 
-    test('it refreshes the acknowledgment queue so the obligation stays visible', () {
-      // The outstanding banner is driven by UrgentAckService, so the screen
-      // re-reads it rather than assuming the obligation is gone.
-      expect(
-        notifications.contains('UrgentAckService.instance.refresh()'),
-        isTrue,
-      );
-    });
+    test(
+      'it refreshes the acknowledgment queue so the obligation stays visible',
+      () {
+        // The outstanding banner is driven by UrgentAckService, so the screen
+        // re-reads it rather than assuming the obligation is gone.
+        expect(
+          notifications.contains('UrgentAckService.instance.refresh()'),
+          isTrue,
+        );
+      },
+    );
 
     test('it refreshes the shared badge so counts stay in step', () {
-      expect(notifications.contains('NotificationBadge.instance.refresh()'), isTrue);
+      expect(
+        notifications.contains('NotificationBadge.instance.refresh()'),
+        isTrue,
+      );
     });
 
     test('it is scoped to the signed-in user only', () {

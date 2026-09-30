@@ -384,7 +384,9 @@ class _FolderChip extends StatelessWidget {
               // A shared folder reads differently from one you own, so the
               // distinction is visible in the list itself and not only in a
               // dialog.
-              folder.isShared ? Icons.folder_shared_outlined : Icons.folder_zip_outlined,
+              folder.isShared
+                  ? Icons.folder_zip_outlined
+                  : Icons.folder_zip_outlined,
               size: 13,
               color: selected ? Colors.white : AppColors.textSecondary(context),
             ),
@@ -403,15 +405,19 @@ class _FolderChip extends StatelessWidget {
               Icon(
                 Icons.visibility_outlined,
                 size: 11,
-                color: selected ? Colors.white : AppColors.textTertiary(context),
+                color: selected
+                    ? Colors.white
+                    : AppColors.textTertiary(context),
               ),
             ],
             if (folder.isOwner && folder.memberCount > 0) ...[
               const SizedBox(width: 4),
               Icon(
-                Icons.group_outlined,
+                Icons.groups_outlined,
                 size: 11,
-                color: selected ? Colors.white : AppColors.textTertiary(context),
+                color: selected
+                    ? Colors.white
+                    : AppColors.textTertiary(context),
               ),
             ],
           ],

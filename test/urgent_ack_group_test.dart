@@ -36,7 +36,9 @@ void main() {
       expect(find.textContaining('2 pending'), findsOneWidget);
     });
 
-    testWidgets('a fully acknowledged message reads as settled', (tester) async {
+    testWidgets('a fully acknowledged message reads as settled', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _BubbleHarness(acks: [done('a'), done('b'), done('c')]),
       );

@@ -24,12 +24,17 @@ enum NotificationSource {
   static NotificationSource parse(String? raw) {
     final v = (raw ?? "").trim().toLowerCase();
     return switch (v) {
-      'direct' || 'direct_message' || 'chat' || 'message' || 'dm' =>
-        NotificationSource.directMessage,
+      'direct' ||
+      'direct_message' ||
+      'chat' ||
+      'message' ||
+      'dm' => NotificationSource.directMessage,
       'channel' || 'channel_message' => NotificationSource.channelMessage,
       'group' || 'group_message' => NotificationSource.groupMessage,
       'announcement' || 'announcements' => NotificationSource.announcement,
-      'attendance' || 'clock_in' || 'clock_out' => NotificationSource.attendance,
+      'attendance' ||
+      'clock_in' ||
+      'clock_out' => NotificationSource.attendance,
       'leave' || 'leave_request' => NotificationSource.leave,
       'task' || 'support_case' => NotificationSource.task,
       'sara' => NotificationSource.sara,
@@ -60,11 +65,7 @@ abstract final class NotificationDeepLink {
 
   /// Returns the route to navigate to, or `null` when the notification has no
   /// meaningful destination.
-  static String? resolve({
-    String? type,
-    String? link,
-    String? sourceId,
-  }) {
+  static String? resolve({String? type, String? link, String? sourceId}) {
     final fromLink = _fromLink(link);
     if (fromLink != null) return fromLink;
     return _fromSource(NotificationSource.parse(type), sourceId);

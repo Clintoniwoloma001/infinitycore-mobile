@@ -115,10 +115,7 @@ class _IMeetRecordingExportState extends State<IMeetRecordingExport> {
       final path = '$dir.path/$_stem.txt';
       File(path).writeAsStringSync(text);
       await SharePlus.instance.share(
-        ShareParams(
-          files: [XFile(path)],
-          text: 'Transcript from $_stem',
-        ),
+        ShareParams(files: [XFile(path)], text: 'Transcript from $_stem'),
       );
     } catch (e) {
       if (mounted) setState(() => _error = 'Could not save the transcript: $e');
@@ -175,7 +172,7 @@ class _IMeetRecordingExportState extends State<IMeetRecordingExport> {
                       height: 14,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Icon(Icons.download_outlined, size: 16),
+                  : const Icon(Icons.save_outlined, size: 16),
               label: const Text('Save recording'),
             ),
             OutlinedButton.icon(

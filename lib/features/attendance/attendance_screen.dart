@@ -182,7 +182,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                 if (!linked) return;
                 messenger.showSnackBar(
                   const SnackBar(
-                    content: Text('Biometrics enabled. Tap the clock action again.'),
+                    content: Text(
+                      'Biometrics enabled. Tap the clock action again.',
+                    ),
                     behavior: SnackBarBehavior.floating,
                   ),
                 );
@@ -500,7 +502,9 @@ class _ReminderDeliveryBanner extends StatelessWidget {
         }
 
         final isBlocked = status == ReminderDeliveryStatus.blocked;
-        final icon = isBlocked ? Icons.notifications_off_outlined : Icons.alarm_off_outlined;
+        final icon = isBlocked
+            ? Icons.notifications_off_outlined
+            : Icons.alarm_off_outlined;
         final color = isBlocked ? AppColors.rose : AppColors.amber;
         final title = isBlocked
             ? 'Attendance reminders blocked'
@@ -540,7 +544,8 @@ class _ReminderDeliveryBanner extends StatelessWidget {
                         message,
                         style: TextStyle(
                           fontSize: 11,
-                          color: AppColors.textPrimary(context).withValues(alpha: 0.8),
+                          color: AppColors.textPrimary(context)
+                              .withValues(alpha: 0.8),
                         ),
                       ),
                     ],

@@ -38,6 +38,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
   Map<String, Map<String, dynamic>> _directory = const {};
   Map<String, List<Map<String, dynamic>>> _reactions = {};
   Map<String, List<Map<String, dynamic>>> _attachments = {};
+
   /// Acknowledgment rows per message, so a recipient in a group/channel sees
   /// the same inline acknowledge control the web client shows.
   Map<String, List<Map<String, dynamic>>> _acks = {};
@@ -364,7 +365,10 @@ class _ConversationScreenState extends State<ConversationScreen> {
                 _description,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context)),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: AppColors.textSecondary(context),
+                ),
               ),
           ],
         ),

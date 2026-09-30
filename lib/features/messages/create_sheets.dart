@@ -586,7 +586,10 @@ class _CreateGroupSheetState extends State<_CreateGroupSheet> {
                 children: [
                   Text(
                     '${_selected.length} selected',
-                    style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context)),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textSecondary(context),
+                    ),
                   ),
                   const SizedBox(height: 8),
                   FilledButton(
@@ -804,7 +807,10 @@ class _ConversationInfoSheetState extends State<_ConversationInfoSheet> {
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
                 child: Text(
                   _description,
-                  style: TextStyle(fontSize: 13, color: AppColors.textSecondary(context)),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary(context),
+                  ),
                 ),
               ),
             Padding(

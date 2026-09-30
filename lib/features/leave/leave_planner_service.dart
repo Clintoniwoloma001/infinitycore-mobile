@@ -46,11 +46,11 @@ const Map<String, PlannerStateMeta> plannerStates = {
 enum LeaveVerdict { available, warning, conflict, unknown }
 
 LeaveVerdict leaveVerdictFrom(String? raw) => switch (raw) {
-      'AVAILABLE' => LeaveVerdict.available,
-      'WARNING' => LeaveVerdict.warning,
-      'CONFLICT' => LeaveVerdict.conflict,
-      _ => LeaveVerdict.unknown,
-    };
+  'AVAILABLE' => LeaveVerdict.available,
+  'WARNING' => LeaveVerdict.warning,
+  'CONFLICT' => LeaveVerdict.conflict,
+  _ => LeaveVerdict.unknown,
+};
 
 /// One leave row on the planner timeline.
 class PlannerEntry {
@@ -90,19 +90,19 @@ class PlannerEntry {
   String get effectiveEnd => endDate ?? startDate;
 
   factory PlannerEntry.fromJson(Map<String, dynamic> j) => PlannerEntry(
-        employeeId: (j['employee_id'] ?? '').toString(),
-        fullName: (j['full_name'] ?? '').toString(),
-        employeeNumber: j['employee_number']?.toString(),
-        position: j['position']?.toString(),
-        department: j['department']?.toString(),
-        branchId: j['branch_id']?.toString(),
-        branchName: j['branch_name']?.toString(),
-        requestId: j['request_id']?.toString(),
-        leaveType: (j['leave_type'] ?? '').toString(),
-        status: (j['status'] ?? '').toString(),
-        startDate: (j['start_date'] ?? '').toString(),
-        endDate: j['end_date']?.toString(),
-        workingDays: (j['working_days'] as num?) ?? 0,
-        plannerState: (j['planner_state'] ?? 'completed').toString(),
-      );
+    employeeId: (j['employee_id'] ?? '').toString(),
+    fullName: (j['full_name'] ?? '').toString(),
+    employeeNumber: j['employee_number']?.toString(),
+    position: j['position']?.toString(),
+    department: j['department']?.toString(),
+    branchId: j['branch_id']?.toString(),
+    branchName: j['branch_name']?.toString(),
+    requestId: j['request_id']?.toString(),
+    leaveType: (j['leave_type'] ?? '').toString(),
+    status: (j['status'] ?? '').toString(),
+    startDate: (j['start_date'] ?? '').toString(),
+    endDate: j['end_date']?.toString(),
+    workingDays: (j['working_days'] as num?) ?? 0,
+    plannerState: (j['planner_state'] ?? 'completed').toString(),
+  );
 }

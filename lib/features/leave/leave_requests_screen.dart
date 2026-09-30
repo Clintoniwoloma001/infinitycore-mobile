@@ -93,18 +93,14 @@ class _LeaveRequestsScreenState extends State<LeaveRequestsScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) => LeaveDetailSheet(
-        request: request,
-        onChanged: _load,
-      ),
+      builder: (_) => LeaveDetailSheet(request: request, onChanged: _load),
     );
     await _load();
   }
 
   bool get _canApproveQueue =>
-      AuthService.instance.role.isNotEmpty && _approverRoles.contains(
-        AuthService.instance.role,
-      );
+      AuthService.instance.role.isNotEmpty &&
+      _approverRoles.contains(AuthService.instance.role);
 
   @override
   Widget build(BuildContext context) {
@@ -147,9 +143,7 @@ class _LeaveRequestsScreenState extends State<LeaveRequestsScreen> {
               selected: _filter,
               counts: {
                 for (final s in leaveStatuses)
-                  s: _requests
-                      .where((r) => r.status.toLowerCase() == s)
-                      .length,
+                  s: _requests.where((r) => r.status.toLowerCase() == s).length,
               },
               onChanged: (v) => setState(() => _filter = v),
             ),
@@ -166,15 +160,13 @@ class _LeaveRequestsScreenState extends State<LeaveRequestsScreen> {
             if (_visible.isEmpty)
               const PageEmptyView(
                 title: 'No leave requests',
-                description: 'Requests you submit will appear here with their '
+                description:
+                    'Requests you submit will appear here with their '
                     'approval progress.',
               )
             else
               for (final r in _visible) ...[
-                _LeaveRequestTile(
-                  request: r,
-                  onTap: () => _openDetail(r),
-                ),
+                _LeaveRequestTile(request: r, onTap: () => _openDetail(r)),
                 const SizedBox(height: 10),
               ],
           ],
@@ -287,12 +279,9 @@ class _BalanceCard extends StatelessWidget {
               builder: (context, v, _) => LinearProgressIndicator(
                 value: v,
                 minHeight: 6,
-                backgroundColor: AppColors.accent(
-                  context,
-                ).withValues(alpha: 0.12),
-                valueColor: AlwaysStoppedAnimation(
-                  AppColors.accent(context),
-                ),
+                backgroundColor: AppColors.accent(context)
+                    .withValues(alpha: 0.12),
+                valueColor: AlwaysStoppedAnimation(AppColors.accent(context)),
               ),
             ),
           ),
@@ -301,7 +290,6 @@ class _BalanceCard extends StatelessWidget {
     );
   }
 }
-
 
 class _StatusFilter extends StatelessWidget {
   const _StatusFilter({
@@ -368,11 +356,7 @@ class _ApprovalQueueHint extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(
-            Icons.verified_user_outlined,
-            size: 18,
-            color: AppColors.amber,
-          ),
+          Icon(Icons.verified_user_outlined, size: 18, color: AppColors.amber),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -391,10 +375,8 @@ class _ApprovalQueueHint extends StatelessWidget {
   }
 }
 
-String _titleCase(String value) => value.isEmpty
-    ? value
-    : '${value[0].toUpperCase()}${value.substring(1)}';
-
+String _titleCase(String value) =>
+    value.isEmpty ? value : '${value[0].toUpperCase()}${value.substring(1)}';
 
 /// One leave request row, with an inline progress rail showing how far the
 /// configured approval chain has advanced.
@@ -442,10 +424,7 @@ class _LeaveRequestTile extends StatelessWidget {
                       ),
                     ),
                   ),
-                  StatusBadge(
-                    label: _titleCase(request.status),
-                    color: color,
-                  ),
+                  StatusBadge(label: _titleCase(request.status), color: color),
                 ],
               ),
               const SizedBox(height: 6),
@@ -518,7 +497,6 @@ class _LeaveRequestTile extends StatelessWidget {
     );
   }
 }
-
 
 /// New-leave composer. Writes to the same `leave_requests` table as web, so
 /// the server resolves the identical approval chain from the created row.
@@ -647,10 +625,7 @@ class _LeaveComposerSheetState extends State<LeaveComposerSheet> {
             ),
             const SizedBox(height: 12),
             Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: 12,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
                 color: AppColors.accent(context).withValues(alpha: 0.10),
                 borderRadius: BorderRadius.circular(12),
@@ -757,16 +732,11 @@ class _DateField extends StatelessWidget {
   }
 }
 
-
 /// Full detail for one request: approval trail (including any dates an
 /// approver revised and every sign-off), PDF export, feedback, and the
 /// approver decision actions when the signed-in user is eligible to act.
 class LeaveDetailSheet extends StatefulWidget {
-  const LeaveDetailSheet({
-    super.key,
-    required this.request,
-    this.onChanged,
-  });
+  const LeaveDetailSheet({super.key, required this.request, this.onChanged});
 
   final LeaveRequest request;
   final Future<void> Function()? onChanged;
@@ -1022,9 +992,7 @@ class _LeaveDetailSheetState extends State<LeaveDetailSheet> {
                       SupabaseService.client.auth.currentUser?.id)
                 TextButton(
                   onPressed: _cancelOwn,
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppColors.rose,
-                  ),
+                  style: TextButton.styleFrom(foregroundColor: AppColors.rose),
                   child: const Text('Cancel this request'),
                 ),
             ],
@@ -1047,7 +1015,6 @@ Color _statusColor(BuildContext context, String status) {
       return AppColors.amber;
   }
 }
-
 
 /// The three approver outcomes the web workflow supports.
 enum LeaveDecisionAction {
@@ -1118,16 +1085,9 @@ class _TrailTile extends StatelessWidget {
                 width: 10,
                 height: 10,
                 margin: const EdgeInsets.only(top: 4),
-                decoration: BoxDecoration(
-                  color: color,
-                  shape: BoxShape.circle,
-                ),
+                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
               ),
-              Container(
-                width: 2,
-                height: 46,
-                color: AppColors.border(context),
-              ),
+              Container(width: 2, height: 46, color: AppColors.border(context)),
             ],
           ),
           const SizedBox(width: 10),
@@ -1220,7 +1180,6 @@ class _TrailTile extends StatelessWidget {
     );
   }
 }
-
 
 /// Approver decision capture: comment, optional revised dates, and a sign-off
 /// by signature pad or typed name/initials.
@@ -1430,8 +1389,7 @@ class _DecisionSheetState extends State<_DecisionSheet> {
   }
 }
 
-DateTime _parseDate(String value) =>
-    DateTime.tryParse(value) ?? DateTime.now();
+DateTime _parseDate(String value) => DateTime.tryParse(value) ?? DateTime.now();
 
 /// Post-decision feedback, written through `submit_leave_feedback`.
 class _FeedbackSheet extends StatefulWidget {
@@ -1573,4 +1531,3 @@ class _RatingRow extends StatelessWidget {
     );
   }
 }
-

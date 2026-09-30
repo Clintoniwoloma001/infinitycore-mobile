@@ -21,15 +21,19 @@ import 'package:infinitycore/core/security/role_guard.dart';
 ///
 /// Mirrors `visibleDestinations()` but takes the role explicitly so it can be
 /// exercised without a signed-in session.
-List<String> visibleFor(String? role, {String? storedDepartment}) => appDestinations()
-    .where((d) => canSeeDepartment(role, d.department, storedDepartment))
-    .where((d) => switch (d.id) {
-      'automation' => canViewAutomation(role),
-      'branch-performance' => role != null && canOpenExecutiveWorkspace(role),
-      _ => true,
-    })
-    .map((d) => d.id)
-    .toList(growable: false);
+List<String> visibleFor(String? role, {String? storedDepartment}) =>
+    appDestinations()
+        .where((d) => canSeeDepartment(role, d.department, storedDepartment))
+        .where(
+          (d) => switch (d.id) {
+            'automation' => canViewAutomation(role),
+            'branch-performance' =>
+              role != null && canOpenExecutiveWorkspace(role),
+            _ => true,
+          },
+        )
+        .map((d) => d.id)
+        .toList(growable: false);
 
 void main() {
   group('1. An HR account sees the shared set plus Training', () {
@@ -85,7 +89,11 @@ void main() {
       for (final role in kRoleDepartment.keys) {
         final out = visibleFor(role);
         expect(out, contains('profile'), reason: '$role lost Profile');
-        expect(out, contains('notifications'), reason: '$role lost Notifications');
+        expect(
+          out,
+          contains('notifications'),
+          reason: '$role lost Notifications',
+        );
       }
     });
   });
@@ -98,21 +106,35 @@ void main() {
       );
     });
 
-    test('Admin is unrestricted by department, but still loses Branch Performance', () {
-      // Two different axes, and they deliberately disagree here:
-      //  * kUnrestrictedRoles (super_admin, admin) waives the DEPARTMENT filter.
-      //  * Branch Performance needs `director.executive.read`, which the
-      //    backend seeds for director / super_admin / md_ceo / chairman ONLY.
-      // Admin is not seeded, so hiding the destination is the honest answer
-      // and matches the server, which would refuse the RPC anyway.
-      final out = visibleFor(AppRoles.admin);
-      expect(out, contains('automation'), reason: 'Admin has the automation read grant');
-      expect(out, isNot(contains('branch-performance')));
-      // ...and it still reaches every department, which is what unrestricted means.
-      for (final role in kRoleDepartment.keys) {
-        expect(canSeeDepartment(AppRoles.admin, role == AppRoles.staff ? null : role, null), isTrue);
-      }
-    });
+    test(
+      'Admin is unrestricted by department, but still loses Branch Performance',
+      () {
+        // Two different axes, and they deliberately disagree here:
+        //  * kUnrestrictedRoles (super_admin, admin) waives the DEPARTMENT filter.
+        //  * Branch Performance needs `director.executive.read`, which the
+        //    backend seeds for director / super_admin / md_ceo / chairman ONLY.
+        // Admin is not seeded, so hiding the destination is the honest answer
+        // and matches the server, which would refuse the RPC anyway.
+        final out = visibleFor(AppRoles.admin);
+        expect(
+          out,
+          contains('automation'),
+          reason: 'Admin has the automation read grant',
+        );
+        expect(out, isNot(contains('branch-performance')));
+        // ...and it still reaches every department, which is what unrestricted means.
+        for (final role in kRoleDepartment.keys) {
+          expect(
+            canSeeDepartment(
+              AppRoles.admin,
+              role == AppRoles.staff ? null : role,
+              null,
+            ),
+            isTrue,
+          );
+        }
+      },
+    );
 
     test('MD/CEO and Chairman see Branch Performance', () {
       for (final role in <String>[AppRoles.mdCeo, AppRoles.chairman]) {
@@ -146,7 +168,11 @@ void main() {
         AppRoles.headOfHumanResources,
         AppRoles.headOfEBusiness,
       ]) {
-        expect(canViewAutomation(role), isTrue, reason: '$role should be permitted');
+        expect(
+          canViewAutomation(role),
+          isTrue,
+          reason: '$role should be permitted',
+        );
       }
     });
 
@@ -160,7 +186,11 @@ void main() {
         AppRoles.headOfLegal,
         AppRoles.director,
       ]) {
-        expect(canViewAutomation(role), isFalse, reason: '$role must not be permitted');
+        expect(
+          canViewAutomation(role),
+          isFalse,
+          reason: '$role must not be permitted',
+        );
       }
     });
 

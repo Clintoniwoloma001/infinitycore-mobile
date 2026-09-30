@@ -170,19 +170,31 @@ void main() {
 
     test('normalizes late_status raw 1/0 and passthrough text', () {
       expect(
-        AttendanceManagementRow.fromJson({'attendance_id': 'a3', 'late_status': '1'}).lateStatus,
+        AttendanceManagementRow.fromJson({
+          'attendance_id': 'a3',
+          'late_status': '1',
+        }).lateStatus,
         'late',
       );
       expect(
-        AttendanceManagementRow.fromJson({'attendance_id': 'a3', 'late_status': '0'}).lateStatus,
+        AttendanceManagementRow.fromJson({
+          'attendance_id': 'a3',
+          'late_status': '0',
+        }).lateStatus,
         'on_time',
       );
       expect(
-        AttendanceManagementRow.fromJson({'attendance_id': 'a3', 'late_status': null}).lateStatus,
+        AttendanceManagementRow.fromJson({
+          'attendance_id': 'a3',
+          'late_status': null,
+        }).lateStatus,
         '',
       );
       expect(
-        AttendanceManagementRow.fromJson({'attendance_id': 'a3', 'late_status': 'late'}).lateStatus,
+        AttendanceManagementRow.fromJson({
+          'attendance_id': 'a3',
+          'late_status': 'late',
+        }).lateStatus,
         'late',
       );
     });
@@ -199,17 +211,23 @@ void main() {
     });
 
     test('falls back to a raw token', () {
-      final p = QrTerminalPayload.tryParse('  7f8e9d0c1b2a3f4e5d6c7b8a9f0e1d2c  ');
+      final p = QrTerminalPayload.tryParse(
+        '  7f8e9d0c1b2a3f4e5d6c7b8a9f0e1d2c  ',
+      );
       expect(p.token, '7f8e9d0c1b2a3f4e5d6c7b8a9f0e1d2c');
       expect(p.source, 'raw');
     });
 
     test('rejects empty and non-terminal inputs', () {
       expect(() => QrTerminalPayload.tryParse(''), throwsFormatException);
-      expect(() => QrTerminalPayload.tryParse('https://example.com/foo'),
-          throwsFormatException);
-      expect(() => QrTerminalPayload.tryParse('has / slash'),
-          throwsFormatException);
+      expect(
+        () => QrTerminalPayload.tryParse('https://example.com/foo'),
+        throwsFormatException,
+      );
+      expect(
+        () => QrTerminalPayload.tryParse('has / slash'),
+        throwsFormatException,
+      );
     });
   });
 
@@ -269,8 +287,8 @@ void main() {
         });
 
     Widget host(AttendanceHistoryCard card) => MaterialApp(
-          home: Scaffold(body: SingleChildScrollView(child: card)),
-        );
+      home: Scaffold(body: SingleChildScrollView(child: card)),
+    );
 
     testWidgets('filters by DAY, WEEK and MONTH', (tester) async {
       final now = DateTime.now();
@@ -278,9 +296,17 @@ void main() {
       final delta6 = today.subtract(const Duration(days: 6));
       final old = today.subtract(const Duration(days: 800));
 
-      await tester.pumpWidget(host(AttendanceHistoryCard(
-        records: [record('old', old), record('six', delta6), record('now', today)],
-      )));
+      await tester.pumpWidget(
+        host(
+          AttendanceHistoryCard(
+            records: [
+              record('old', old),
+              record('six', delta6),
+              record('now', today),
+            ],
+          ),
+        ),
+      );
 
       final todayLabel = Fmt.dateShort(isoDate(today));
       final delta6Label = Fmt.dateShort(isoDate(delta6));
@@ -306,22 +332,22 @@ void main() {
       expect(find.text(oldLabel), findsNothing);
     });
 
-    testWidgets('caps rows at maxRows and surfaces the empty state',
-        (tester) async {
+    testWidgets('caps rows at maxRows and surfaces the empty state', (
+      tester,
+    ) async {
       final now = DateTime.now().toLocal();
       await tester.pumpWidget(
         host(const AttendanceHistoryCard(records: [], maxRows: 12)),
       );
-      expect(find.text('Clock in to create your first attendance record.'),
-          findsOneWidget);
+      expect(
+        find.text('Clock in to create your first attendance record.'),
+        findsOneWidget,
+      );
 
-      final rows = [
-        for (var i = 0; i < 15; i++) record('r$i', now),
-      ];
-      await tester.pumpWidget(host(AttendanceHistoryCard(
-        records: rows,
-        maxRows: 12,
-      )));
+      final rows = [for (var i = 0; i < 15; i++) record('r$i', now)];
+      await tester.pumpWidget(
+        host(AttendanceHistoryCard(records: rows, maxRows: 12)),
+      );
       await tester.tap(find.text('DAY'));
       await tester.pumpAndSettle();
       expect(find.text(Fmt.dateShort(isoDate(now))), findsNWidgets(12));
@@ -332,7 +358,7 @@ void main() {
     test('extracts each known server prefix', () {
       const cases = {
         'MOBILE_SESSION: This device is no longer your active session. '
-            'Sign in on another device.':
+                'Sign in on another device.':
             'This device is no longer your active session. Sign in on another device.',
         'OUTSIDE_GEOFENCE: You are 2.1 km from the nearest approved location.':
             'You are 2.1 km from the nearest approved location.',
@@ -353,23 +379,27 @@ void main() {
     test('extracts biometric and unauthorized-device server prefixes', () {
       expect(
         AttendanceService.normalizeError(
-            'BIOMETRIC_REQUIRED:Attendance requires a successful biometric '
-            'assertion on this device.'),
+          'BIOMETRIC_REQUIRED:Attendance requires a successful biometric '
+          'assertion on this device.',
+        ),
         'Attendance requires a successful biometric assertion on this device.',
       );
       expect(
         AttendanceService.normalizeError(
-            'MOBILE_UNAUTHORIZED_DEVICE:This account is already linked to '
-            'another mobile device. Please contact HR or Super Admin to '
-            'authorize this device.'),
+          'MOBILE_UNAUTHORIZED_DEVICE:This account is already linked to '
+          'another mobile device. Please contact HR or Super Admin to '
+          'authorize this device.',
+        ),
         'This account is already linked to another mobile device. Please '
-            'contact HR or Super Admin to authorize this device.',
+        'contact HR or Super Admin to authorize this device.',
       );
     });
 
     test('maps messages to friendly text', () {
       expect(
-        AttendanceService.normalizeError('PostgrestException: you are outside the geofence'),
+        AttendanceService.normalizeError(
+          'PostgrestException: you are outside the geofence',
+        ),
         'You are outside the approved attendance location.',
       );
       expect(
@@ -392,12 +422,14 @@ void main() {
     test('extracts terminal-validation server prefixes', () {
       expect(
         AttendanceService.normalizeError(
-            'TERMINAL_INACTIVE:This attendance terminal is not active.'),
+          'TERMINAL_INACTIVE:This attendance terminal is not active.',
+        ),
         'This attendance terminal is not active.',
       );
       expect(
         AttendanceService.normalizeError(
-            'TERMINAL_NOT_FOUND:No terminal matches that code.'),
+          'TERMINAL_NOT_FOUND:No terminal matches that code.',
+        ),
         'No terminal matches that code.',
       );
     });

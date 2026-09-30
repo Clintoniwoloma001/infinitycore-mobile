@@ -21,7 +21,9 @@ void main() {
     home: HostFabScope(notifier: hostFab, child: child),
   );
 
-  testWidgets('a published button is readable through the scope', (tester) async {
+  testWidgets('a published button is readable through the scope', (
+    tester,
+  ) async {
     final hostFab = ValueNotifier<Widget?>(null);
     addTearDown(hostFab.dispose);
 
@@ -67,7 +69,9 @@ void main() {
     final hostFab = ValueNotifier<Widget?>(null);
     addTearDown(hostFab.dispose);
 
-    await tester.pumpWidget(app(hostFab, HostFabPublisher(builder: (_) => null)));
+    await tester.pumpWidget(
+      app(hostFab, HostFabPublisher(builder: (_) => null)),
+    );
     await tester.pump();
     await tester.pump();
     expect(hostFab.value, isNull);

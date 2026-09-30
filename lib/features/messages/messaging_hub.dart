@@ -234,8 +234,7 @@ class MessagingHub with WidgetsBindingObserver {
     // device locked. A `normal` message keeps the routine channel, and its
     // heading, so nothing else changes.
     final needsAck =
-        CommunicationService.messageRequiresAck(record) &&
-            !isAnnouncement;
+        CommunicationService.messageRequiresAck(record) && !isAnnouncement;
     if (needsAck) {
       final copy = AcknowledgementService.notificationCopy(
         priority: priority,

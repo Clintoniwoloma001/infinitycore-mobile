@@ -388,18 +388,23 @@ class CommunicationService {
     List<String>? mentionIds,
     String? parentMessageId,
   }) async {
-    await _callRpcCandidates(['send_rich_message'], {
-      'p_message_type': contextType,
-      'p_context_id': contextId,
-      'p_body': body,
-      'p_priority': (priority == null || priority == 'normal') ? null : priority,
-      'p_requires_ack': requiresAck,
-      'p_files': files.isEmpty ? null : files,
-      'p_mention_ids': (mentionIds == null || mentionIds.isEmpty)
-          ? null
-          : mentionIds,
-      'p_parent_message_id': parentMessageId,
-    });
+    await _callRpcCandidates(
+      ['send_rich_message'],
+      {
+        'p_message_type': contextType,
+        'p_context_id': contextId,
+        'p_body': body,
+        'p_priority': (priority == null || priority == 'normal')
+            ? null
+            : priority,
+        'p_requires_ack': requiresAck,
+        'p_files': files.isEmpty ? null : files,
+        'p_mention_ids': (mentionIds == null || mentionIds.isEmpty)
+            ? null
+            : mentionIds,
+        'p_parent_message_id': parentMessageId,
+      },
+    );
   }
 
   /// Acknowledgement rows for the given messages.
@@ -465,7 +470,9 @@ class CommunicationService {
   /// The result is capped at [limit] rows on purpose: the blocking dialog only
   /// ever shows the oldest outstanding item, and a hard bound stops a long
   /// history of unacknowledged broadcasts from turning into a slow query.
-  Future<({List<Map<String, dynamic>> pending, List<Map<String, dynamic>> acks})>
+  Future<
+    ({List<Map<String, dynamic>> pending, List<Map<String, dynamic>> acks})
+  >
   pendingMessageAcks({int limit = 50}) async {
     final empty = <Map<String, dynamic>>[];
     final me = SupabaseService.client.auth.currentUser?.id;

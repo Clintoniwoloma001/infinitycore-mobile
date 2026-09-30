@@ -107,8 +107,7 @@ class _HostFabPublisherState extends State<HostFabPublisher> {
     // Resolve the slot from the tree rather than from a global, so a publisher
     // always writes to the scope it is actually inside. Falls back to the
     // active notifier when used standalone (preview / test).
-    final slot =
-        HostFabScope.of(context)?.notifier ?? HostFabScope.current;
+    final slot = HostFabScope.of(context)?.notifier ?? HostFabScope.current;
     _slot = slot;
     HostFabScope.attach(slot);
     _publish();

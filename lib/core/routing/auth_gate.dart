@@ -113,7 +113,8 @@ String? redirectDecision(AuthGateState auth, String loc, Uri uri) {
   // data. The authoritative check remains the role gate inside
   // get_director_executive_snapshot on the server.
   final onExecutiveRoute = loc == executiveRoute;
-  final wantsExecutiveHome = loc == '/home' && usesExecutiveWorkspace(auth.role);
+  final wantsExecutiveHome =
+      loc == '/home' && usesExecutiveWorkspace(auth.role);
 
   if (onExecutiveRoute && !canOpenExecutiveWorkspace(auth.role)) {
     return '/home';

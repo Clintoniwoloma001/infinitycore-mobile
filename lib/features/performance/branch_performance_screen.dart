@@ -57,7 +57,8 @@ class BranchPerformanceScreen extends StatefulWidget {
   const BranchPerformanceScreen({super.key});
 
   @override
-  State<BranchPerformanceScreen> createState() => _BranchPerformanceScreenState();
+  State<BranchPerformanceScreen> createState() =>
+      _BranchPerformanceScreenState();
 }
 
 class _BranchPerformanceScreenState extends State<BranchPerformanceScreen> {
@@ -169,7 +170,8 @@ class _BranchPerformanceScreenState extends State<BranchPerformanceScreen> {
     if (branches.isEmpty) {
       return const PageEmptyView(
         title: 'No branch data for this period',
-        description: 'Try a wider period, or ask HR to confirm branch assignments.',
+        description:
+            'Try a wider period, or ask HR to confirm branch assignments.',
       );
     }
 
@@ -224,7 +226,10 @@ class _BranchPerformanceScreenState extends State<BranchPerformanceScreen> {
           const SizedBox(height: 18),
           SectionHeader(
             title: 'BY BRANCH',
-            trailing: _SortButton(sort: _sort, onChanged: (s) => setState(() => _sort = s)),
+            trailing: _SortButton(
+              sort: _sort,
+              onChanged: (s) => setState(() => _sort = s),
+            ),
           ),
           for (final b in sorted) ...[
             _BranchCard(branch: b),
@@ -297,7 +302,11 @@ class _BranchCard extends StatelessWidget {
             const SizedBox(height: 9),
             Row(
               children: [
-                Icon(Icons.beach_access_outlined, size: 13, color: AppColors.amber),
+                Icon(
+                  Icons.beach_access_outlined,
+                  size: 13,
+                  color: AppColors.amber,
+                ),
                 const SizedBox(width: 5),
                 Text(
                   '${branch.onLeave} on leave',
@@ -374,8 +383,14 @@ class _SortButton extends StatelessWidget {
       onSelected: onChanged,
       itemBuilder: (_) => const [
         PopupMenuItem(value: BranchSort.byStaff, child: Text('Most staff')),
-        PopupMenuItem(value: BranchSort.attendanceDesc, child: Text('Best attendance')),
-        PopupMenuItem(value: BranchSort.attendanceAsc, child: Text('Lowest attendance')),
+        PopupMenuItem(
+          value: BranchSort.attendanceDesc,
+          child: Text('Best attendance'),
+        ),
+        PopupMenuItem(
+          value: BranchSort.attendanceAsc,
+          child: Text('Lowest attendance'),
+        ),
         PopupMenuItem(value: BranchSort.nameAsc, child: Text('Name (A-Z)')),
       ],
     );

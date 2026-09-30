@@ -111,8 +111,7 @@ class LeaveApproval {
   final String revisedStart;
   final String revisedEnd;
 
-  bool get hasRevisedDates =>
-      revisedStart.isNotEmpty || revisedEnd.isNotEmpty;
+  bool get hasRevisedDates => revisedStart.isNotEmpty || revisedEnd.isNotEmpty;
 
   factory LeaveApproval.fromRow(Map<String, dynamic> row) {
     final payload = _json(row['metadata'] ?? row['payload'] ?? row['details']);
@@ -310,7 +309,8 @@ class LeaveService {
       final r = await _db.rpc('resolve_user_identity');
       if (r is List && r.isNotEmpty && r.first is Map) {
         final m = Map<String, dynamic>.from(r.first as Map);
-        final name = '${m['full_name'] ?? m['name'] ?? m['email'] ?? ''}'.trim();
+        final name = '${m['full_name'] ?? m['name'] ?? m['email'] ?? ''}'
+            .trim();
         if (name.isNotEmpty) return name;
       }
     } catch (_) {}
@@ -492,8 +492,7 @@ bool canActOnRequest(
   }.contains(r);
 }
 
-bool _isOwn(LeaveRequest request, String userId) =>
-    request.createdBy == userId;
+bool _isOwn(LeaveRequest request, String userId) => request.createdBy == userId;
 
 // ------------------------------------------------------------------
 // Shared helpers

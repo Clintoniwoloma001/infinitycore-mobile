@@ -259,7 +259,9 @@ class _DepartmentCardState extends State<_DepartmentCard> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           InkWell(
-            onTap: items.isEmpty ? null : () => setState(() => _expanded = !_expanded),
+            onTap: items.isEmpty
+                ? null
+                : () => setState(() => _expanded = !_expanded),
             borderRadius: BorderRadius.circular(14),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
@@ -291,10 +293,7 @@ class _DepartmentCardState extends State<_DepartmentCard> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  MetricBar(
-                    value: pct,
-                    color: automationBarColour(pct),
-                  ),
+                  MetricBar(value: pct, color: automationBarColour(pct)),
                   const SizedBox(height: 7),
                   Text(
                     '${d.live} live · ${d.inProgress} in progress · '
@@ -410,11 +409,7 @@ class _WorkflowRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(
-            Icons.play_circle_outline,
-            size: 16,
-            color: AppColors.amber,
-          ),
+          Icon(Icons.play_circle_outline, size: 16, color: AppColors.amber),
           const SizedBox(width: 10),
           Expanded(
             child: Column(

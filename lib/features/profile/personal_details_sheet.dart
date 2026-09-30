@@ -43,12 +43,7 @@ const _sections = <(String, List<_Field>)>[
     'Personal',
     [
       _Field('date_of_birth', 'Date of birth', type: _FieldType.date),
-      _Field(
-        'sex',
-        'Sex',
-        type: _FieldType.dropdown,
-        hint: 'Select',
-      ),
+      _Field('sex', 'Sex', type: _FieldType.dropdown, hint: 'Select'),
       _Field('nationality', 'Nationality'),
       _Field('religion', 'Religion'),
       _Field('denomination', 'Denomination'),
@@ -131,10 +126,7 @@ class _PersonalDetailsSheetState extends State<PersonalDetailsSheet> {
                 const Expanded(
                   child: Text(
                     'Personal details',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                    ),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                   ),
                 ),
                 // A non-flex child in a Row that contains an `Expanded` is laid
@@ -193,6 +185,7 @@ class _PersonalDetailsSheetState extends State<PersonalDetailsSheet> {
       ),
     );
   }
+
   Widget _buildField(_Field f) {
     final value = '${_draft[f.key] ?? ''}';
     return Padding(
@@ -247,6 +240,7 @@ class _PersonalDetailsSheetState extends State<PersonalDetailsSheet> {
       ),
     );
   }
+
   /// Shared input chrome for the text fields.
   InputDecoration _decoration(_Field f) => InputDecoration(
     isDense: true,
@@ -298,10 +292,7 @@ class _DropdownField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final items = <String>{
-      if (value.isNotEmpty) value,
-      ...options,
-    }.toList();
+    final items = <String>{if (value.isNotEmpty) value, ...options}.toList();
     return DropdownButtonFormField<String>(
       initialValue: value.isEmpty ? null : value,
       isExpanded: true,

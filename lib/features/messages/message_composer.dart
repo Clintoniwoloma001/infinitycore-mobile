@@ -45,8 +45,9 @@ class MessageDraft {
       priority != 'normal' || requiresAck || attachments.isNotEmpty;
 
   /// The `p_files` payload for `send_rich_message`.
-  List<Map<String, dynamic>> get rpcFiles =>
-      [for (final a in attachments) a.toRpcFile()];
+  List<Map<String, dynamic>> get rpcFiles => [
+    for (final a in attachments) a.toRpcFile(),
+  ];
 }
 
 /// Full composer: text, attachments, voice notes, priority and the
@@ -194,7 +195,9 @@ class _MessageComposerState extends State<MessageComposer> {
       // file_picker 13 returns the selected `PlatformFile`s directly; a null
       // path means the provider handed back a name only (iOS without a cached
       // copy), which cannot be uploaded and is skipped.
-      final files = await FilePicker.pickFiles(dialogTitle: 'Attach a document');
+      final files = await FilePicker.pickFiles(
+        dialogTitle: 'Attach a document',
+      );
       if (files.isEmpty) return;
       final picked = <(String, String)>[];
       for (final f in files) {
@@ -410,8 +413,8 @@ class _MessageComposerState extends State<MessageComposer> {
                     backgroundColor: _priority == 'urgent'
                         ? AppColors.rose
                         : AppColors.accent(context),
-                    disabledBackgroundColor:
-                        AppColors.accent(context).withValues(alpha: 0.35),
+                    disabledBackgroundColor: AppColors.accent(context)
+                        .withValues(alpha: 0.35),
                     minimumSize: const Size(44, 44),
                   ),
                   icon: _sending
@@ -492,7 +495,6 @@ class _MessageComposerState extends State<MessageComposer> {
     );
   }
 }
-
 
 /// Small icon button used for attach / mic / priority in the composer row.
 class _CircleButton extends StatelessWidget {

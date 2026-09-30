@@ -306,12 +306,13 @@ class AttendanceRequirements {
       geofenceEnabled: _b(m['geofence_enabled'], false),
       defaultGeofenceRadius: _d(m['default_geofence_radius']) ?? 150,
       lateThresholdMinutes: _i(m['late_threshold_minutes'], 15),
-      earlyDepartureThresholdMinutes:
-          _i(m['early_departure_threshold_minutes'], 30),
+      earlyDepartureThresholdMinutes: _i(
+        m['early_departure_threshold_minutes'],
+        30,
+      ),
       defaultWorkStartTime: _s(m['default_work_start_time']),
       defaultWorkEndTime: _s(m['default_work_end_time']),
-      defaultGracePeriodMinutes:
-          _i(m['default_grace_period_minutes'], 0),
+      defaultGracePeriodMinutes: _i(m['default_grace_period_minutes'], 0),
       defaultWorkingDays: days is List
           ? days.map((d) => d.toString().trim()).toList()
           : const [],

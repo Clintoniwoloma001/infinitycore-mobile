@@ -71,7 +71,10 @@ void main() {
     test('strips path-hostile characters and caps the length', () {
       // Every disallowed character becomes exactly one underscore, matching
       // `SAFE_NAME_RE` on the web so both clients build identical object keys.
-      expect(safeAttachmentName('my report (final).pdf'), 'my report _final_.pdf');
+      expect(
+        safeAttachmentName('my report (final).pdf'),
+        'my report _final_.pdf',
+      );
       expect(safeAttachmentName('../../etc/passwd'), '.._.._etc_passwd');
       expect(safeAttachmentName(''), 'file');
       expect(safeAttachmentName('a' * 300).length, 120);
@@ -80,16 +83,17 @@ void main() {
 
   group('PendingAttachment.toRpcFile', () {
     test('emits the exact column shape send_rich_message expects', () {
-      final a = PendingAttachment(
-        path: '/tmp/voice-note-1.m4a',
-        fileName: 'voice-note-1.m4a',
-        mimeType: 'audio/mp4',
-        sizeBytes: 2048,
-        durationMs: 3000,
-      )
-        ..uploadedPath = 'chat/direct/t1/u1/voice-note-1.m4a'
-        ..checksum = 'abc'
-        ..stage = AttachmentStage.uploaded;
+      final a =
+          PendingAttachment(
+              path: '/tmp/voice-note-1.m4a',
+              fileName: 'voice-note-1.m4a',
+              mimeType: 'audio/mp4',
+              sizeBytes: 2048,
+              durationMs: 3000,
+            )
+            ..uploadedPath = 'chat/direct/t1/u1/voice-note-1.m4a'
+            ..checksum = 'abc'
+            ..stage = AttachmentStage.uploaded;
 
       expect(a.toRpcFile(), {
         'file_name': 'voice-note-1.m4a',
@@ -130,7 +134,10 @@ void main() {
         CommunicationService.messagePriority({'priority': 'critical'}),
         'urgent',
       );
-      expect(CommunicationService.messagePriority({'priority': 'high'}), 'high');
+      expect(
+        CommunicationService.messagePriority({'priority': 'high'}),
+        'high',
+      );
       expect(
         CommunicationService.messagePriority({'priority': 'important'}),
         'high',
@@ -252,19 +259,21 @@ void main() {
       );
     });
 
-    test('a senderless message is labelled by kind, not by repeating the title',
-        () {
-      final senderless = PendingAck(
-        id: 'm3',
-        kind: PendingAckKind.message,
-        title: 'Safety briefing',
-        body: '',
-        senderName: '',
-        createdAt: '',
-      );
-      expect(senderless.subtitle, 'Direct message');
-      expect(senderless.subtitle, isNot(senderless.title));
-    });
+    test(
+      'a senderless message is labelled by kind, not by repeating the title',
+      () {
+        final senderless = PendingAck(
+          id: 'm3',
+          kind: PendingAckKind.message,
+          title: 'Safety briefing',
+          body: '',
+          senderName: '',
+          createdAt: '',
+        );
+        expect(senderless.subtitle, 'Direct message');
+        expect(senderless.subtitle, isNot(senderless.title));
+      },
+    );
   });
 
   group('UrgentAckService reminder contract', () {
@@ -471,9 +480,7 @@ void main() {
     // provide a real Navigator and Overlay — which is also what makes the
     // PopScope assertion meaningful.
     Widget harness(Widget home) => MaterialApp(
-      home: Builder(
-        builder: (context) => UrgentAckGate(child: home),
-      ),
+      home: Builder(builder: (context) => UrgentAckGate(child: home)),
     );
 
     const item = PendingAck(
@@ -496,7 +503,9 @@ void main() {
       expect(find.text('Safety briefing'), findsNothing);
     });
 
-    testWidgets('shows the obligation without blocking the app', (tester) async {
+    testWidgets('shows the obligation without blocking the app', (
+      tester,
+    ) async {
       UrgentAckService.instance.pending.value = [item];
       await tester.pumpWidget(harness(const Scaffold(body: Text('Home'))));
       await tester.pump();
@@ -540,8 +549,9 @@ void main() {
       );
     });
 
-    testWidgets('dismissing hides the banner but keeps the obligation',
-        (tester) async {
+    testWidgets('dismissing hides the banner but keeps the obligation', (
+      tester,
+    ) async {
       // Point 8: dismissal is NOT acknowledgment. The banner goes away for
       // five minutes while the item stays in the pending queue, so the
       // five-minute reminder and the resurfacing banner can still reach it.
@@ -587,7 +597,9 @@ void main() {
       );
 
       // One second short of the window: still hidden.
-      await tester.pump(const Duration(minutes: 5) - const Duration(seconds: 1));
+      await tester.pump(
+        const Duration(minutes: 5) - const Duration(seconds: 1),
+      );
       expect(
         find.text('URGENT MESSAGE — acknowledgement required'),
         findsNothing,
@@ -649,7 +661,9 @@ void main() {
       expect(find.text('Evacuate via the north stairs.'), findsOneWidget);
     });
 
-    testWidgets('a network failure never clears the obligation', (tester) async {
+    testWidgets('a network failure never clears the obligation', (
+      tester,
+    ) async {
       // Simulates the "server did not record it" path: the queue is untouched
       // by design, so the obligation survives and can be retried.
       UrgentAckService.instance.pending.value = [item];
@@ -685,12 +699,15 @@ void main() {
       );
     });
 
-    testWidgets('the banner is visible on any screen, not just Messages',
-        (tester) async {
+    testWidgets('the banner is visible on any screen, not just Messages', (
+      tester,
+    ) async {
       // Point 7: mounted above the router, so the obligation follows the user
       // across the app instead of hiding on every non-Messages route.
       UrgentAckService.instance.pending.value = [item];
-      await tester.pumpWidget(harness(const Scaffold(body: Text('Attendance'))));
+      await tester.pumpWidget(
+        harness(const Scaffold(body: Text('Attendance'))),
+      );
       await tester.pump();
       expect(find.text('Attendance'), findsOneWidget);
       expect(
@@ -750,16 +767,11 @@ void main() {
   });
 
   group('PersonalProfile', () {
-    PersonalProfile profile(Map<String, dynamic> row) => PersonalProfile(
-      employeeId: 'e1',
-      row: row,
-    );
+    PersonalProfile profile(Map<String, dynamic> row) =>
+        PersonalProfile(employeeId: 'e1', row: row);
 
     test('staff number falls back through the same chain as the web card', () {
-      expect(
-        profile({'employee_number': 'IC-0001'}).staffNumber,
-        'IC-0001',
-      );
+      expect(profile({'employee_number': 'IC-0001'}).staffNumber, 'IC-0001');
       expect(profile({'staff_id': 'STF-9'}).staffNumber, 'STF-9');
       expect(profile({'employee_code': 'C7'}).staffNumber, 'C7');
       // employee_number wins when several are present.
@@ -829,10 +841,7 @@ void main() {
     });
 
     test('trims before comparing so whitespace is not a phantom edit', () {
-      expect(
-        PersonalProfile.diff(before, {'town': '  Lagos  '}),
-        isEmpty,
-      );
+      expect(PersonalProfile.diff(before, {'town': '  Lagos  '}), isEmpty);
     });
 
     test('records a cleared field rather than ignoring it', () {

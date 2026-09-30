@@ -356,7 +356,10 @@ class _SessionsList extends StatelessWidget {
                     '${s['description']}',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context)),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary(context),
+                    ),
                   ),
                 ],
                 if (s['assessment_required'] == true) ...[
@@ -884,7 +887,10 @@ class _CreateAllTabState extends State<_CreateAllTab> {
                 _participants.isEmpty
                     ? Text(
                         'No participants selected yet.',
-                        style: TextStyle(fontSize: 12, color: AppColors.textTertiary(context)),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textTertiary(context),
+                        ),
                       )
                     : Wrap(
                         spacing: 6,
@@ -958,7 +964,10 @@ class _CreateAllTabState extends State<_CreateAllTab> {
                   const SizedBox(height: 10),
                   Text(
                     'No employees match the current filters.',
-                    style: TextStyle(fontSize: 12, color: AppColors.textTertiary(context)),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textTertiary(context),
+                    ),
                   ),
                 ],
               ],
@@ -1005,7 +1014,10 @@ class _CreateAllTabState extends State<_CreateAllTab> {
                   Text(
                     'KSS question bank — one question per line:\n'
                     'Question | Correct answer | Option 1, Option 2, Option 3',
-                    style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context)),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textSecondary(context),
+                    ),
                   ),
                   const SizedBox(height: 8),
                   TextFormField(
@@ -1239,7 +1251,10 @@ class _TrainingAssessmentScreenState extends State<TrainingAssessmentScreen> {
                   children: [
                     Text(
                       'Your question set is fixed by HR for this attempt.',
-                      style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context)),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary(context),
+                      ),
                     ),
                     for (final (i, q) in _questions.indexed) ...[
                       const SizedBox(height: 12),
@@ -1349,7 +1364,9 @@ class _QuestionInput extends StatelessWidget {
                             ? Icons.radio_button_checked
                             : Icons.radio_button_off,
                         size: 18,
-                        color: value == '$o' ? AppColors.green : AppColors.textTertiary(context),
+                        color: value == '$o'
+                            ? AppColors.green
+                            : AppColors.textTertiary(context),
                       ),
                     ],
                   ),

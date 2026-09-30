@@ -109,7 +109,10 @@ class AcknowledgementService {
 
   static List<Map<String, dynamic>> _rows(Object? raw) {
     if (raw is List) {
-      return [for (final r in raw) if (r is Map) Map<String, dynamic>.from(r)];
+      return [
+        for (final r in raw)
+          if (r is Map) Map<String, dynamic>.from(r),
+      ];
     }
     return const [];
   }
@@ -164,10 +167,7 @@ class AcknowledgementService {
     required String senderName,
     required String route,
   }) async {
-    final copy = notificationCopy(
-      priority: priority,
-      senderName: senderName,
-    );
+    final copy = notificationCopy(priority: priority, senderName: senderName);
     await NotificationService.instance.show(
       // One id per priority so a resend replaces its own notification instead
       // of stacking duplicates in the shade.

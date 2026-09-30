@@ -166,7 +166,10 @@ class AutomationService {
 
     List<Map<String, dynamic>> rows(Object? v) {
       if (v is! List) return const [];
-      return v.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
+      return v
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList(growable: false);
     }
 
     return AutomationPortfolio(

@@ -42,9 +42,10 @@ void main() {
   group('The bottom bar carries only shared, general destinations', () {
     // Extract the declared tab labels so the assertion is about the real
     // source rather than a copy of it.
-    final labels = RegExp(
-      r"_TabDef\(\s*'([^']+)'",
-    ).allMatches(shellSrc).map((m) => m.group(1)!).toSet();
+    final labels = RegExp(r"_TabDef\(\s*'([^']+)'")
+        .allMatches(shellSrc)
+        .map((m) => m.group(1)!)
+        .toSet();
 
     test('the bottom bar declares its tabs', () {
       expect(labels, isNotEmpty);
@@ -122,11 +123,7 @@ void main() {
       for (final d in registry) {
         // Either a department tag or membership of the known-shared set; the
         // dedicated test in smart_navigation_test.dart pins that set.
-        expect(
-          d.department != null || d.id.isNotEmpty,
-          isTrue,
-          reason: d.id,
-        );
+        expect(d.department != null || d.id.isNotEmpty, isTrue, reason: d.id);
       }
     });
 

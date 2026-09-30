@@ -167,14 +167,11 @@ class LeavePdf {
     final fontBold = 2 * n + 4;
     final total = 2 * n + 4;
 
-    final kids = [
-      for (var i = 0; i < n; i++) '${3 + i} 0 R',
-    ].join(' ');
+    final kids = [for (var i = 0; i < n; i++) '${3 + i} 0 R'].join(' ');
 
     final bodies = <int, String>{
       1: '<< /Type /Catalog /Pages 2 0 R >>',
-      2:
-          '<< /Type /Pages /Kids [$kids] /Count $n >>',
+      2: '<< /Type /Pages /Kids [$kids] /Count $n >>',
       fontRegular:
           '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica '
           '/Encoding /WinAnsiEncoding >>',

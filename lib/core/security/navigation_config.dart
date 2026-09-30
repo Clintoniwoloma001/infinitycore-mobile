@@ -141,18 +141,14 @@ bool isSharedOnly(String? role) => departmentsForRole(role).isEmpty;
 ///
 /// Kept as a pure predicate so this file stays free of any Flutter import and
 /// the mapping can be exercised by plain unit tests.
-bool canSeeDepartment(
-  String? role,
-  String? ownedBy,
-  String? storedDepartment,
-) {
+bool canSeeDepartment(String? role, String? ownedBy, String? storedDepartment) {
   if (role != null && kUnrestrictedRoles.contains(role)) return true;
   final mine = departmentsForRole(role).toSet();
   if (storedDepartment != null) {
-    final normalised = storedDepartment
-        .trim()
-        .toLowerCase()
-        .replaceAll(RegExp(r'[\s-]+'), '_');
+    final normalised = storedDepartment.trim().toLowerCase().replaceAll(
+      RegExp(r'[\s-]+'),
+      '_',
+    );
     if (AppDepartments.all.contains(normalised)) mine.add(normalised);
   }
   return ownedBy == null || mine.contains(ownedBy);

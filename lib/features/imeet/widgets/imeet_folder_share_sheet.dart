@@ -26,8 +26,7 @@ class IMeetFolderShareSheet extends StatefulWidget {
   }
 
   @override
-  State<IMeetFolderShareSheet> createState() =>
-      _IMeetFolderShareSheetState();
+  State<IMeetFolderShareSheet> createState() => _IMeetFolderShareSheetState();
 }
 
 class _IMeetFolderShareSheetState extends State<IMeetFolderShareSheet> {
@@ -98,11 +97,10 @@ class _IMeetFolderShareSheetState extends State<IMeetFolderShareSheet> {
       // list is never patched optimistically.
       await _load();
       if (!mounted) return;
-      final name = _people
-          .firstWhere(
-            (p) => p['id'] == id,
-            orElse: () => const {'full_name': 'the user'},
-          )['full_name'];
+      final name = _people.firstWhere(
+        (p) => p['id'] == id,
+        orElse: () => const {'full_name': 'the user'},
+      )['full_name'];
       setState(() {
         _notice = 'Access granted to $name.';
         _selectedUserId = null;
@@ -277,7 +275,7 @@ class _IMeetFolderShareSheetState extends State<IMeetFolderShareSheet> {
                       trailing: widget.folder.isOwner
                           ? IconButton(
                               tooltip: 'Remove access',
-                              icon: const Icon(Icons.person_remove_outlined),
+                              icon: const Icon(Icons.person_off_outlined),
                               onPressed: _busy ? null : () => _remove(m),
                             )
                           : null,
@@ -351,7 +349,7 @@ class _IMeetFolderShareSheetState extends State<IMeetFolderShareSheet> {
                     height: 16,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Icon(Icons.person_add_alt),
+                : const Icon(Icons.person_outline),
             label: const Text('Grant access'),
           ),
         ),

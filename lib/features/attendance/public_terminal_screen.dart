@@ -544,7 +544,10 @@ class _PublicAttendanceTerminalScreenState
               const SizedBox(height: 8),
               Text(
                 _distanceNote(),
-                style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context)),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: AppColors.textSecondary(context),
+                ),
               ),
             ],
           ],

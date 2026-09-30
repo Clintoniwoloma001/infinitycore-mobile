@@ -49,6 +49,7 @@ abstract class BiometricAttendanceService {
   /// local preference wins, because a false "you have not set this up" is the
   /// failure mode that actually annoys people.
   Future<bool> hasCompletedSetup();
+
   /// Perform a native biometric assertion. Returns true on success.
   Future<bool> authenticate({
     String reason = 'Confirm your identity to record attendance',

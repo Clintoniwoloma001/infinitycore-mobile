@@ -73,11 +73,9 @@ void main() {
 
     test('a recipient of that same message does owe one', () {
       expect(
-        AcknowledgementService.ackRequiredByMe(
-          mine,
-          [ack(me, 'pending')],
-          them,
-        ),
+        AcknowledgementService.ackRequiredByMe(mine, [
+          ack(me, 'pending'),
+        ], them),
         isTrue,
       );
     });
@@ -86,11 +84,9 @@ void main() {
   group('point 2 — acknowledgment is per user and durable', () {
     test('acknowledging is sticky', () {
       expect(
-        AcknowledgementService.ackRequiredByMe(
-          important,
-          [ack(me, 'acknowledged')],
-          me,
-        ),
+        AcknowledgementService.ackRequiredByMe(important, [
+          ack(me, 'acknowledged'),
+        ], me),
         isFalse,
       );
     });
@@ -109,11 +105,9 @@ void main() {
 
     test('a member with no seeded row still owes one', () {
       expect(
-        AcknowledgementService.ackRequiredByMe(
-          important,
-          [ack(them, 'acknowledged')],
-          other,
-        ),
+        AcknowledgementService.ackRequiredByMe(important, [
+          ack(them, 'acknowledged'),
+        ], other),
         isTrue,
       );
     });

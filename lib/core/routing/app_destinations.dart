@@ -171,13 +171,13 @@ List<AppDestination> visibleDestinations() {
   final role = auth.role;
 
   return appDestinations()
+      .where((d) => canSeeDepartment(role, d.department, auth.department))
       .where(
-        (d) => canSeeDepartment(role, d.department, auth.department),
+        (d) => switch (d.id) {
+          'automation' => canViewAutomation(role),
+          'branch-performance' => canOpenExecutiveWorkspace(role),
+          _ => true,
+        },
       )
-      .where((d) => switch (d.id) {
-        'automation' => canViewAutomation(role),
-        'branch-performance' => canOpenExecutiveWorkspace(role),
-        _ => true,
-      })
       .toList(growable: false);
 }

@@ -57,7 +57,8 @@ class _SaraScreenState extends State<SaraScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            _voice.availabilityMessage ?? 'The microphone could not be started.',
+            _voice.availabilityMessage ??
+                'The microphone could not be started.',
           ),
           behavior: SnackBarBehavior.floating,
         ),
@@ -229,7 +230,9 @@ class _SaraScreenState extends State<SaraScreen> {
                     ),
                   ),
                   icon: Icon(
-                    _voice.isListening ? Icons.stop_rounded : Icons.mic_none_rounded,
+                    _voice.isListening
+                        ? Icons.stop_rounded
+                        : Icons.mic_none_rounded,
                     size: 20,
                   ),
                 ),
@@ -481,9 +484,7 @@ class _SaraBubble extends StatelessWidget {
           style: TextStyle(
             fontSize: 13,
             height: 1.35,
-            color: fromUser
-                ? Colors.white
-                : AppColors.textPrimary(context),
+            color: fromUser ? Colors.white : AppColors.textPrimary(context),
           ),
         ),
       ),

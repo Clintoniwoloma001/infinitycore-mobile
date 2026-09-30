@@ -23,13 +23,16 @@ void main() {
   });
 
   group('nextWeekdayOccurrence', () {
-    test('schedules for today if time is strictly in the future on a weekday', () {
-      // Monday 2026-09-21 at 07:00 -> target 08:30
-      final mondayMorning = DateTime(2026, 9, 21, 7, 0);
-      final next = nextWeekdayOccurrence(mondayMorning, 8, 30);
+    test(
+      'schedules for today if time is strictly in the future on a weekday',
+      () {
+        // Monday 2026-09-21 at 07:00 -> target 08:30
+        final mondayMorning = DateTime(2026, 9, 21, 7, 0);
+        final next = nextWeekdayOccurrence(mondayMorning, 8, 30);
 
-      expect(next, DateTime(2026, 9, 21, 8, 30));
-    });
+        expect(next, DateTime(2026, 9, 21, 8, 30));
+      },
+    );
 
     test('schedules for next day if target time today has already passed on a weekday', () {
       // Monday 2026-09-21 at 09:00 -> target 08:30 -> should be Tuesday 2026-09-22 08:30

@@ -46,8 +46,9 @@ class _DepartmentDetailScreenState extends State<DepartmentDetailScreen> {
       setState(() {
         _staff = snap.staff
             .where(
-              (p) => (text(p['department']) ?? '').toLowerCase()
-                  == widget.department.toLowerCase(),
+              (p) =>
+                  (text(p['department']) ?? '').toLowerCase() ==
+                  widget.department.toLowerCase(),
             )
             .toList();
         _loading = false;
@@ -71,26 +72,14 @@ class _DepartmentDetailScreenState extends State<DepartmentDetailScreen> {
         children: [
           MetricStrip(
             tiles: [
-              MetricTile(
-                label: 'Staff',
-                value: fmtInt(r['staff_count']),
-              ),
-              MetricTile(
-                label: 'On leave',
-                value: fmtInt(r['on_leave']),
-              ),
-              MetricTile(
-                label: 'Absent',
-                value: fmtInt(r['absent']),
-              ),
+              MetricTile(label: 'Staff', value: fmtInt(r['staff_count'])),
+              MetricTile(label: 'On leave', value: fmtInt(r['on_leave'])),
+              MetricTile(label: 'Absent', value: fmtInt(r['absent'])),
               MetricTile(
                 label: 'Attendance',
                 value: fmtPct(r['attendance_rate']),
               ),
-              MetricTile(
-                label: 'KPI',
-                value: fmtPct(r['kpi_completion']),
-              ),
+              MetricTile(label: 'KPI', value: fmtPct(r['kpi_completion'])),
               MetricTile(
                 label: 'Targets',
                 value: fmtPct(r['target_completion']),
@@ -112,7 +101,10 @@ class _DepartmentDetailScreenState extends State<DepartmentDetailScreen> {
           else if (_staff.isEmpty)
             Text(
               'No staff reported for this department.',
-              style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context)),
+              style: TextStyle(
+                fontSize: 12,
+                color: AppColors.textSecondary(context),
+              ),
             )
           else
             ..._staff.map(

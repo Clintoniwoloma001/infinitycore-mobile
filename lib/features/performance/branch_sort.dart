@@ -22,7 +22,11 @@ class BranchSort {
 
   /// Most staff first. This is the order the server already returns, so it is
   /// the default and needs no client-side work to look right.
-  static const byStaff = BranchSort(BranchSortKey.staff, descending: true, label: 'Most staff');
+  static const byStaff = BranchSort(
+    BranchSortKey.staff,
+    descending: true,
+    label: 'Most staff',
+  );
 
   static const attendanceDesc = BranchSort(
     BranchSortKey.attendance,
@@ -36,7 +40,11 @@ class BranchSort {
     label: 'Lowest attendance',
   );
 
-  static const nameAsc = BranchSort(BranchSortKey.name, descending: false, label: 'Name');
+  static const nameAsc = BranchSort(
+    BranchSortKey.name,
+    descending: false,
+    label: 'Name',
+  );
 
   /// [measure] returns the sortable value, or null when the server did not
   /// measure it.

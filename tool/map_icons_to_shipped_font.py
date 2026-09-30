@@ -36,10 +36,19 @@ MAP = {
     'stop_circle_outlined': 'cancel_outlined',        # halt
     'today': 'today_outlined',                        # outlined variant
     'upcoming': 'event',                              # a scheduled event
+
+    # --- I-Meet folder sharing / export (added in eb1be3f) ---------------
+    'folder_shared_outlined': 'folder_zip_outlined',  # a shared folder
+    'group_outlined': 'groups_outlined',              # a group of people
+    'download_outlined': 'save_outlined',             # save / export
+    'person_add_alt': 'person_outline',               # add a person
+    'person_remove_outlined': 'person_off_outlined',  # remove a person
 }
 
+# Scan the WHOLE app, not just one feature: the blocker is the shipped font,
+# which is app-wide. A new icon in any feature blocks every patch.
 changed = 0
-for path in sorted(pathlib.Path('lib/features/imeet').rglob('*.dart')):
+for path in sorted(pathlib.Path('lib').rglob('*.dart')):
     original = path.read_text()
     updated = original
     for old, new in MAP.items():

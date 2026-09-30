@@ -137,8 +137,6 @@ class LightPanel extends StatelessWidget {
   }
 }
 
-
-
 class AppTheme {
   static ThemeData get light {
     final scheme = ColorScheme.fromSeed(
@@ -257,9 +255,7 @@ class AppTheme {
           fontWeight: FontWeight.w700,
         ),
         side: BorderSide.none,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
       dividerTheme: DividerThemeData(
         color: isDark ? AppColors.borderDark : const Color(0xFFEDF1F7),
@@ -282,10 +278,7 @@ class AppTheme {
             : const Color(0xFF5B6472),
         indicatorColor: accent,
         dividerColor: isDark ? AppColors.borderDark : const Color(0xFFE8EDF4),
-        labelStyle: const TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w700,
-        ),
+        labelStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
         unselectedLabelStyle: const TextStyle(
           fontSize: 14,
           fontWeight: FontWeight.w600,
@@ -328,9 +321,7 @@ class AppTheme {
         indicatorColor: accent.withValues(alpha: 0.16),
         selectedIconTheme: IconThemeData(color: accent, size: 22),
         unselectedIconTheme: IconThemeData(
-          color: isDark
-              ? AppColors.textSecondaryDark
-              : const Color(0xFF5B6472),
+          color: isDark ? AppColors.textSecondaryDark : const Color(0xFF5B6472),
           size: 22,
         ),
         selectedLabelTextStyle: TextStyle(
@@ -341,9 +332,7 @@ class AppTheme {
         unselectedLabelTextStyle: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w600,
-          color: isDark
-              ? AppColors.textSecondaryDark
-              : const Color(0xFF5B6472),
+          color: isDark ? AppColors.textSecondaryDark : const Color(0xFF5B6472),
         ),
       ),
       bottomSheetTheme: BottomSheetThemeData(
@@ -370,9 +359,7 @@ class AppTheme {
         ),
         subtitleTextStyle: TextStyle(
           fontSize: 12.5,
-          color: isDark
-              ? AppColors.textSecondaryDark
-              : const Color(0xFF5B6472),
+          color: isDark ? AppColors.textSecondaryDark : const Color(0xFF5B6472),
         ),
       ),
       segmentedButtonTheme: SegmentedButtonThemeData(
@@ -409,9 +396,7 @@ class AppTheme {
           fontWeight: FontWeight.w600,
           color: Colors.white,
         ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       popupMenuTheme: PopupMenuThemeData(
         color: isDark ? AppColors.surfaceDark : Colors.white,

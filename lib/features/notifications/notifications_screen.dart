@@ -162,7 +162,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       height: 14,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Icon(Icons.done_all, size: 18),
+                  // `done_all_rounded`, not `done_all`: the shipped 1.1.0+9 font
+                  // does not contain the unrounded glyph, so the unrounded
+                  // name rendered as a BLANK box on that release. The rounded
+                  // sibling is in the font, so the glyph is guaranteed to draw.
+                  : const Icon(Icons.done_all_rounded, size: 18),
               label: const Text('Mark all as read'),
             ),
         ],

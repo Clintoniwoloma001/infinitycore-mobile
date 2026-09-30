@@ -4,8 +4,9 @@ import 'dart:ui' as ui;
 import 'package:flutter_test/flutter_test.dart';
 
 Future<({int painted, int opaque})> analyze(ui.Image img) async {
-  final bytes =
-      (await img.toByteData(format: ui.ImageByteFormat.rawRgba))!.buffer.asUint8List();
+  final bytes = (await img.toByteData(format: ui.ImageByteFormat.rawRgba))!
+      .buffer
+      .asUint8List();
   var painted = 0, opaque = 0;
   for (var i = 0; i < bytes.length; i += 4) {
     final a = bytes[i + 3];

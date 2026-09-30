@@ -76,9 +76,13 @@ AutomationPortfolio _build() {
       .map((e) => Map<String, dynamic>.from(e))
       .toList(growable: false);
   return AutomationPortfolio(
-    departments: rows(map['departments']).map(AutomationDepartment.new).toList(),
+    departments: rows(map['departments'])
+        .map(AutomationDepartment.new)
+        .toList(),
     items: rows(map['items']).map(AutomationItem.new).toList(),
-    activeWorkflows: rows(map['active_workflows']).map(AutomationItem.new).toList(),
+    activeWorkflows: rows(map['active_workflows'])
+        .map(AutomationItem.new)
+        .toList(),
     totalItems: (totals['items'] as num).toInt(),
     totalLive: (totals['live'] as num).toInt(),
   );
@@ -130,8 +134,14 @@ void main() {
   group('Item status', () {
     test('maps the wire values the database CHECK allows', () {
       expect(AutomationStatus.parse('live'), AutomationStatus.live);
-      expect(AutomationStatus.parse('in_progress'), AutomationStatus.inProgress);
-      expect(AutomationStatus.parse('not_started'), AutomationStatus.notStarted);
+      expect(
+        AutomationStatus.parse('in_progress'),
+        AutomationStatus.inProgress,
+      );
+      expect(
+        AutomationStatus.parse('not_started'),
+        AutomationStatus.notStarted,
+      );
     });
 
     test('an unrecognised status fails safe to not-started, never to live', () {
@@ -153,7 +163,9 @@ void main() {
       expect(p.itemsFor('admin').map((i) => i.key), <String>[
         'branch_turnaround_tracking',
       ]);
-      expect(p.itemsFor('hr').map((i) => i.key), <String>['performance_appraisal']);
+      expect(p.itemsFor('hr').map((i) => i.key), <String>[
+        'performance_appraisal',
+      ]);
       expect(p.itemsFor('risk'), isEmpty);
     });
 

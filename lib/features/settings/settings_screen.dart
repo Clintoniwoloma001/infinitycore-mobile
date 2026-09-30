@@ -53,7 +53,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 subtitle: Text(
                   'Follows your device theme',
-                  style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context)),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textSecondary(context),
+                  ),
                 ),
                 value: _dark,
                 activeTrackColor: AppColors.green,
@@ -76,7 +79,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 subtitle: Text(
                   'Instagram-like local cache is minimal',
-                  style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context)),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textSecondary(context),
+                  ),
                 ),
                 trailing: const Icon(
                   Icons.cleaning_services_outlined,
@@ -93,7 +99,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 subtitle: Text(
                   _version,
-                  style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context)),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textSecondary(context),
+                  ),
                 ),
                 trailing: const Icon(Icons.info_outline, size: 18),
               ),
@@ -116,7 +125,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 subtitle: Text(
                   domain,
-                  style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context)),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textSecondary(context),
+                  ),
                 ),
               ),
             ],

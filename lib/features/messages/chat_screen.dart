@@ -583,11 +583,7 @@ class _ChatScreenState extends State<ChatScreen> {
           onTap: _showProfile,
           child: Row(
             children: [
-              AvatarCircle(
-                name: _otherName,
-                size: 34,
-                onTap: _showProfile,
-              ),
+              AvatarCircle(name: _otherName, size: 34, onTap: _showProfile),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -718,9 +714,7 @@ class _ChatScreenState extends State<ChatScreen> {
       // The roster must name real people: `chat_message_acks` holds only ids,
       // and an outstanding list of UUIDs is not actionable for a sender.
       nameFor: (id) => '${_directory[id]?['full_name'] ?? ''}',
-      onAcknowledge: needsMyAck
-          ? () => _acknowledge(m)
-          : null,
+      onAcknowledge: needsMyAck ? () => _acknowledge(m) : null,
       onLongPress: () => _showActions(m),
       onToggleReaction: (emoji, mineReaction) => _runAction(
         mineReaction ? 'Reaction removed' : 'Reaction added',

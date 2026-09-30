@@ -81,20 +81,28 @@ void main() {
       }
     });
 
-    test('the neutral loading screen and public routes are always reachable',
-        () {
-      for (final status in AuthStatus.values) {
-        expect(
-          _decide(_FakeAuth(status: status), '/splash'),
-          anyOf(isNull, '/home', '/lock', '/login'),
-        );
-        expect(_decide(_FakeAuth(status: status), '/login'), anyOf(isNull, '/home'));
-      }
-    });
+    test(
+      'the neutral loading screen and public routes are always reachable',
+      () {
+        for (final status in AuthStatus.values) {
+          expect(
+            _decide(_FakeAuth(status: status), '/splash'),
+            anyOf(isNull, '/home', '/lock', '/login'),
+          );
+          expect(
+            _decide(_FakeAuth(status: status), '/login'),
+            anyOf(isNull, '/home'),
+          );
+        }
+      },
+    );
 
     test('first-ever launch with no session resolves to Login, never Home', () {
       // unknown = nothing read yet
-      expect(_decide(_FakeAuth(status: AuthStatus.unknown), '/home'), '/splash');
+      expect(
+        _decide(_FakeAuth(status: AuthStatus.unknown), '/home'),
+        '/splash',
+      );
       // bootstrap() with no persisted session publishes unauthenticated
       expect(
         _decide(_FakeAuth(status: AuthStatus.unauthenticated), '/home'),
@@ -236,7 +244,8 @@ void main() {
             expect(
               decision,
               loadingRoute,
-              reason: '$status + $route must go to $loadingRoute, got $decision',
+              reason:
+                  '$status + $route must go to $loadingRoute, got $decision',
             );
           }
         }
@@ -261,7 +270,10 @@ void main() {
     test('an authenticated user is never parked on the loading screen', () {
       for (final route in _allRoutes) {
         final decision = _decide(
-          _FakeAuth(status: AuthStatus.authenticated, role: AppRoles.superAdmin),
+          _FakeAuth(
+            status: AuthStatus.authenticated,
+            role: AppRoles.superAdmin,
+          ),
           route,
         );
         expect(decision, isNot(loadingRoute), reason: route);

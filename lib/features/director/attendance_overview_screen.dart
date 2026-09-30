@@ -15,7 +15,8 @@ class AttendanceOverviewScreen extends StatefulWidget {
   const AttendanceOverviewScreen({super.key});
 
   @override
-  State<AttendanceOverviewScreen> createState() => _AttendanceOverviewScreenState();
+  State<AttendanceOverviewScreen> createState() =>
+      _AttendanceOverviewScreenState();
 }
 
 class _AttendanceOverviewScreenState extends State<AttendanceOverviewScreen> {
@@ -56,55 +57,60 @@ class _AttendanceOverviewScreenState extends State<AttendanceOverviewScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(_error!, textAlign: TextAlign.center),
-                  ),
-                )
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  child: ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      MetricStrip(
-                        tiles: [
-                          MetricTile(
-                            label: 'Rate',
-                            value: fmtPct(_summary['attendance_rate']),
-                            icon: Icons.schedule_outlined,
-                          ),
-                          MetricTile(
-                            label: 'Present',
-                            value: fmtInt(_summary['present']),
-                            icon: Icons.check_circle_outline,
-                          ),
-                          MetricTile(
-                            label: 'Absent',
-                            value: fmtInt(_summary['absent']),
-                            icon: Icons.person_off_outlined,
-                          ),
-                          MetricTile(
-                            label: 'Late',
-                            value: fmtInt(_summary['late']),
-                            icon: Icons.schedule_outlined,
-                          ),
-                          MetricTile(
-                            label: 'Not clocked in',
-                            value: fmtInt(_summary['not_clocked_in']),
-                            icon: Icons.timer_off_outlined,
-                          ),
-                        ],
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(_error!, textAlign: TextAlign.center),
+              ),
+            )
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  MetricStrip(
+                    tiles: [
+                      MetricTile(
+                        label: 'Rate',
+                        value: fmtPct(_summary['attendance_rate']),
+                        icon: Icons.schedule_outlined,
                       ),
-                      const SizedBox(height: 16),
-                      const SectionHeader(title: 'BY PERSON'),
-                      if (_staff.isEmpty)
-                        Text(
-                          'No attendance reported for this period.',
-                          style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context)),
-                        )
-                      else
-                        ..._staff.take(20).map(
+                      MetricTile(
+                        label: 'Present',
+                        value: fmtInt(_summary['present']),
+                        icon: Icons.check_circle_outline,
+                      ),
+                      MetricTile(
+                        label: 'Absent',
+                        value: fmtInt(_summary['absent']),
+                        icon: Icons.person_off_outlined,
+                      ),
+                      MetricTile(
+                        label: 'Late',
+                        value: fmtInt(_summary['late']),
+                        icon: Icons.schedule_outlined,
+                      ),
+                      MetricTile(
+                        label: 'Not clocked in',
+                        value: fmtInt(_summary['not_clocked_in']),
+                        icon: Icons.timer_off_outlined,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  const SectionHeader(title: 'BY PERSON'),
+                  if (_staff.isEmpty)
+                    Text(
+                      'No attendance reported for this period.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary(context),
+                      ),
+                    )
+                  else
+                    ..._staff
+                        .take(20)
+                        .map(
                           (p) => ListTile(
                             contentPadding: EdgeInsets.zero,
                             dense: true,
@@ -127,7 +133,8 @@ class _AttendanceOverviewScreenState extends State<AttendanceOverviewScreen> {
                               ),
                             ),
                             onTap: () {
-                              final id = text(p['employee_id']) ?? text(p['id']);
+                              final id =
+                                  text(p['employee_id']) ?? text(p['id']);
                               if (id == null) return;
                               Navigator.of(context).push(
                                 MaterialPageRoute<void>(
@@ -140,9 +147,9 @@ class _AttendanceOverviewScreenState extends State<AttendanceOverviewScreen> {
                             },
                           ),
                         ),
-                    ],
-                  ),
-                ),
+                ],
+              ),
+            ),
     );
   }
 }

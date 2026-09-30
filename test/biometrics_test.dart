@@ -15,7 +15,10 @@ void main() {
       // Same guarantee the --dart-define=true build exercises.
       expect(biometricService, same(MockBiometricAttendanceService.instance));
     } else {
-      expect(biometricService, isNot(same(MockBiometricAttendanceService.instance)));
+      expect(
+        biometricService,
+        isNot(same(MockBiometricAttendanceService.instance)),
+      );
       expect(biometricService, same(RealBiometricAttendanceService.instance));
     }
   });

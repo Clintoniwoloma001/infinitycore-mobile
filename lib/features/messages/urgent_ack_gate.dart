@@ -9,10 +9,7 @@ import 'urgent_ack_service.dart';
 /// Kept outside the widget tree so the gate and any future inline prompt share
 /// one code path. A failure is *not* treated as success: the caller stays
 /// blocked so the client cannot claim compliance the server has not recorded.
-Future<bool> confirmPendingAck(
-  BuildContext context,
-  PendingAck item,
-) async {
+Future<bool> confirmPendingAck(BuildContext context, PendingAck item) async {
   final messenger = ScaffoldMessenger.maybeOf(context);
   final ok = await UrgentAckService.instance.acknowledge(item);
   if (!context.mounted || ok) return ok;
@@ -259,7 +256,10 @@ class _AckReminderBannerState extends State<AckReminderBanner> {
                             vertical: 6,
                           ),
                         ),
-                        child: const Text('View', style: TextStyle(fontSize: 11)),
+                        child: const Text(
+                          'View',
+                          style: TextStyle(fontSize: 11),
+                        ),
                       ),
                     ],
                   ),
@@ -285,4 +285,3 @@ class _AckReminderBannerState extends State<AckReminderBanner> {
     );
   }
 }
-
