@@ -63,6 +63,12 @@ dependencies:
   just_audio: ^0.10.6
   speech_to_text: ^7.5.0
   flutter_tts: ^4.2.5
+
+  # Direct dependency now, because supabase_flutter reaches for it directly and
+  # the widget tests import its mock. Relying on a transitive version is
+  # unpinned, and an unrelated bump could change what the tests exercise.
+  shared_preferences: ^2.3.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
