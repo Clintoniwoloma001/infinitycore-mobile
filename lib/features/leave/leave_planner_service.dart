@@ -1,7 +1,4 @@
 import 'package:flutter/foundation.dart';
-import 'package:intl/intl.dart';
-
-import '../../core/services/supabase_service.dart';
 
 /// Leave Schedule Planner, ported 1:1 from the web platform's
 /// `src/services/leavePlannerService.js` (Phase 70).
@@ -105,4 +102,73 @@ class PlannerEntry {
     workingDays: (j['working_days'] as num?) ?? 0,
     plannerState: (j['planner_state'] ?? 'completed').toString(),
   );
+}
+/// One day of leave capacity pressure, exactly as the server scored it.
+class LeaveCapacityDay {
+  const LeaveCapacityDay(this.raw);
+
+  final Map<String, dynamic> raw;
+
+  String get date => raw['date']?.toString() ?? '';
+
+  /// People already away on this day.
+  int get onLeave => _asInt(raw['on_leave']);
+
+  /// The ceiling the server applied, or null when no rule governs the day.
+  int? get maxOnLeave {
+    final v = raw['max_on_leave'];
+    return v == null ? null : _asInt(v);
+  }
+
+  /// True when the day is at or over its ceiling.
+  bool get isAtCapacity {
+    final max = maxOnLeave;
+    return max != null && max > 0 && onLeave >= max;
+  }
+
+  /// 0..1, used ONLY to tint the heatmap. Never rendered as a score: the server
+  /// owns the policy, this only spreads colour across its verdict.
+  double get pressure {
+    final max = maxOnLeave;
+    if (max == null || max <= 0) return 0;
+    return (onLeave / max).clamp(0.0, 1.0);
+  }
+
+  static int _asInt(Object? v) {
+    if (v is num) return v.toInt();
+    return int.tryParse('${v ?? ''}'.trim()) ?? 0;
+  }
+}
+
+/// The whole planner in one aggregated read: timeline entries, the overview
+/// counters and the capacity heatmap.
+///
+/// One payload rather than three, because the web reads it the same way.
+/// Splitting it would let the counters and the timeline come from two different
+/// snapshots and disagree on screen.
+class LeavePlanner {
+  const LeavePlanner({
+    required this.entries,
+    required this.summary,
+    required this.capacity,
+  });
+
+  final List<PlannerEntry> entries;
+
+  /// The server's own counters, rendered as-is. The client never recomputes a
+  /// leave duration or a headcount the server already decided.
+  final Map<String, dynamic> summary;
+
+  /// Capacity pressure per day, exactly as the server scored it.
+  final List<LeaveCapacityDay> capacity;
+
+  /// Entries grouped by department, for the grouped view.
+  Map<String, List<PlannerEntry>> get byDepartment {
+    final out = <String, List<PlannerEntry>>{};
+    for (final e in entries) {
+      final key = (e.department?.isNotEmpty ?? false) ? e.department! : 'Unassigned';
+      (out[key] ??= <PlannerEntry>[]).add(e);
+    }
+    return out;
+  }
 }
