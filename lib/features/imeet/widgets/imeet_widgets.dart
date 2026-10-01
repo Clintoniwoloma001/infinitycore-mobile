@@ -38,6 +38,16 @@ class IMeetStatusPill extends StatelessWidget {
         Icons.event_note_outlined,
         AppColors.textTertiary(context),
       ),
+      // A planned meeting has not happened yet, so it reads as pending rather
+      // than as anything already in motion.
+      IMeetStatus.scheduled => (
+        Icons.event_available_outlined,
+        AppColors.accent(context),
+      ),
+      IMeetStatus.cancelled => (
+        Icons.event_busy_outlined,
+        AppColors.textTertiary(context),
+      ),
     };
     return Container(
       padding: EdgeInsets.symmetric(
@@ -77,6 +87,7 @@ class IMeetMeetingTile extends StatelessWidget {
     super.key,
     required this.meeting,
     required this.onTap,
+    this.onLongPress,
     this.recordingCount = 0,
     this.hasSummary = false,
     this.folderName,
@@ -84,6 +95,10 @@ class IMeetMeetingTile extends StatelessWidget {
 
   final IMeetMeeting meeting;
   final VoidCallback onTap;
+
+  /// Optional long-press, used for "edit / reschedule / cancel" on the home
+  /// screen. Tapping still opens the meeting, so this is purely additive.
+  final VoidCallback? onLongPress;
   final int recordingCount;
   final bool hasSummary;
   final String? folderName;
@@ -103,6 +118,7 @@ class IMeetMeetingTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       child: InkWell(
         onTap: onTap,
+        onLongPress: onLongPress,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(14),

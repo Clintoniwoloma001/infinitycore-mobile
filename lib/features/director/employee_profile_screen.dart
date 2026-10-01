@@ -29,6 +29,8 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen> {
   List<Map<String, dynamic>> _leave = const [];
   List<Map<String, dynamic>> _kpis = const [];
   List<Map<String, dynamic>> _targets = const [];
+  List<Map<String, dynamic>> _attendance = const [];
+  Map<String, dynamic> _summary = const {};
   bool _loading = true;
   String? _error;
 
@@ -49,10 +51,18 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen> {
       );
       if (!mounted) return;
       setState(() {
-        _person = asMap(detail['employee'] ?? detail['person'] ?? detail);
+        // The server returns the person under 'profile' and now also aliases it
+        // as 'employee' and 'person'. Reading the top-level payload as a
+        // fallback was what produced a screen full of "--": that object has no
+        // full_name, department or rates, so every tile had nothing to show.
+        _person = asMap(
+          detail['employee'] ?? detail['person'] ?? detail['profile'] ?? {},
+        );
+        _summary = asMap(detail['summary']);
         _leave = asList(detail['leave']);
         _kpis = asList(detail['kpis'] ?? detail['kpi']);
         _targets = asList(detail['targets']);
+        _attendance = asList(detail['attendance']);
         _loading = false;
       });
     } catch (e) {
@@ -99,8 +109,8 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen> {
               )
             : TabBarView(
                 children: [
-                  _OverviewTab(person: _person),
-                  _AttendanceTab(person: _person),
+                  _OverviewTab(person: _person, summary: _summary),
+                  _AttendanceTab(attendance: _attendance, summary: _summary),
                   _LeaveTab(leave: _leave),
                   _PerformanceTab(kpis: _kpis, targets: _targets),
                 ],
@@ -111,9 +121,10 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen> {
 }
 
 class _OverviewTab extends StatelessWidget {
-  const _OverviewTab({required this.person});
+  const _OverviewTab({required this.person, required this.summary});
 
   final Map<String, dynamic> person;
+  final Map<String, dynamic> summary;
 
   @override
   Widget build(BuildContext context) {
@@ -164,16 +175,19 @@ class _OverviewTab extends StatelessWidget {
         _Row('Employee ID', text(person['employee_number'])),
         _Row('Joined', text(person['join_date']) ?? text(person['hire_date'])),
         const SizedBox(height: 16),
+        // Read the rates from the server-computed summary. Before the fix these
+        // keys lived in neither object, so all three tiles rendered "--" for
+        // somebody the list had just shown as 25%.
         MetricStrip(
           tiles: [
             MetricTile(
               label: 'Attendance',
-              value: fmtPct(person['attendance_rate']),
+              value: fmtPct(summary['attendance_rate']),
             ),
-            MetricTile(label: 'KPI', value: fmtPct(person['kpi_completion'])),
+            MetricTile(label: 'KPI', value: fmtPct(summary['kpi_completion'])),
             MetricTile(
               label: 'Targets',
-              value: fmtPct(person['target_completion']),
+              value: fmtPct(summary['target_completion']),
             ),
           ],
         ),
@@ -182,25 +196,317 @@ class _OverviewTab extends StatelessWidget {
   }
 }
 
-class _AttendanceTab extends StatelessWidget {
-  const _AttendanceTab({required this.person});
+/// Attendance tab: summary cards plus the real log history.
+///
+/// This tab used to take the person row and read four keys that were never
+/// there, so it rendered four placeholders and no list at all. It now renders
+/// the `attendance` records the server already returns, filtered by month or
+/// quarter, with the rollup recomputed for the selected period so the header
+/// can never contradict the list beneath it.
+class _AttendanceTab extends StatefulWidget {
+  const _AttendanceTab({required this.attendance, required this.summary});
 
-  final Map<String, dynamic> person;
+  final List<Map<String, dynamic>> attendance;
+  final Map<String, dynamic> summary;
+
+  @override
+  State<_AttendanceTab> createState() => _AttendanceTabState();
+}
+
+class _AttendanceTabState extends State<_AttendanceTab> {
+  /// null = the whole window; otherwise a yyyy-mm-01 month or quarter start.
+  String? _periodKey;
+
+  /// 'month' | 'quarter' | 'all' — how _periodKey is interpreted.
+  String _mode = 'all';
+
+  DateTime? _asDate(dynamic v) => DateTime.tryParse(v?.toString() ?? '');
+
+  String _keyFor(Map<String, dynamic> a) {
+    final d = _asDate(a['attendance_date']);
+    if (d == null) return '';
+    if (_mode == 'month') {
+      return '${d.year}-${d.month.toString().padLeft(2, '0')}-01';
+    }
+    if (_mode == 'quarter') {
+      final q = ((d.month - 1) ~/ 3) * 3 + 1;
+      return '${d.year}-${q.toString().padLeft(2, '0')}-01';
+    }
+    return 'all';
+  }
+
+  List<Map<String, dynamic>> get _rows {
+    final out = widget.attendance
+        .where((a) => _keyFor(a) == (_periodKey ?? 'all'))
+        .toList();
+    // Newest first: the most recent day is the one an executive looks for.
+    out.sort(
+      (a, b) => (_asDate(b['attendance_date']) ?? DateTime(0)).compareTo(
+        _asDate(a['attendance_date']) ?? DateTime(0),
+      ),
+    );
+    return out;
+  }
 
   @override
   Widget build(BuildContext context) {
+    final rows = _rows;
+    final filtered = _periodKey != null;
+
+    final present = rows.where((a) => text(a['clock_in']) != null).length;
+    final late = rows.where((a) => (asInt(a['late_minutes']) ?? 0) > 0).length;
+    final hours = rows
+        .map((a) => asDouble(a['work_hours']) ?? 0)
+        .fold<double>(0, (a, b) => a + b);
+    final rate = rows.isEmpty ? 0 : (present * 100 / rows.length).round();
+    final now = DateTime.now();
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        // Horizontally scrolling Row: a month/quarter label is long enough that
+        // a plain Row would overflow on a narrow phone.
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              _Sel(
+                label: 'All',
+                selected: _mode == 'all',
+                onTap: () => setState(() {
+                  _mode = 'all';
+                  _periodKey = null;
+                }),
+              ),
+              _Sel(
+                label: 'This month',
+                selected: _mode == 'month' && _periodKey != null,
+                onTap: () => setState(() {
+                  _mode = 'month';
+                  _periodKey =
+                      '${now.year}-${now.month.toString().padLeft(2, '0')}-01';
+                }),
+              ),
+              _Sel(
+                label: 'This quarter',
+                selected: _mode == 'quarter' && _periodKey != null,
+                onTap: () => setState(() {
+                  _mode = 'quarter';
+                  final q = ((now.month - 1) ~/ 3) * 3 + 1;
+                  _periodKey = '${now.year}-${q.toString().padLeft(2, '0')}-01';
+                }),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
         MetricStrip(
           tiles: [
-            MetricTile(label: 'Rate', value: fmtPct(person['attendance_rate'])),
-            MetricTile(label: 'Present', value: fmtInt(person['present_days'])),
-            MetricTile(label: 'Absent', value: fmtInt(person['absent_days'])),
-            MetricTile(label: 'Late', value: fmtInt(person['late_days'])),
+            MetricTile(label: 'Rate', value: '$rate%'),
+            MetricTile(label: 'Present', value: fmtInt(present)),
+            MetricTile(label: 'Absent', value: fmtInt(rows.length - present)),
+            MetricTile(label: 'Late', value: fmtInt(late)),
           ],
         ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: _Mini(
+                label: 'Late ratio',
+                value: present == 0 ? '0%' : '${((late * 100) ~/ present)}%',
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _Mini(
+                label: 'Work hours',
+                value: hours.toStringAsFixed(1),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        if (rows.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Center(
+              child: Text(
+                filtered
+                    ? 'No attendance recorded for this period.'
+                    : 'No attendance recorded yet.',
+                style: TextStyle(color: AppColors.textSecondary(context)),
+              ),
+            ),
+          )
+        else
+          for (final a in rows) _AttendanceRow(record: a),
       ],
+    );
+  }
+}
+
+class _Sel extends StatelessWidget {
+  const _Sel({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: ChoiceChip(
+        label: Text(label),
+        selected: selected,
+        onSelected: (_) => onTap(),
+      ),
+    );
+  }
+}
+
+class _Mini extends StatelessWidget {
+  const _Mini({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        // A surface, never a text-ink helper: an ink colour here inverts
+        // between light and dark mode.
+        color: AppColors.surface(context),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.border(context)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 10,
+              color: AppColors.textTertiary(context),
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One attendance day: clock in, clock out, hours and the recorded location.
+class _AttendanceRow extends StatelessWidget {
+  const _AttendanceRow({required this.record});
+
+  final Map<String, dynamic> record;
+
+  String _time(dynamic v) {
+    final s = text(v);
+    if (s == null) return '--';
+    final d = DateTime.tryParse(s);
+    if (d == null) return s;
+    final h = d.hour.toString().padLeft(2, '0');
+    final m = d.minute.toString().padLeft(2, '0');
+    return '$h:$m';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hours = asDouble(record['work_hours']);
+    final late = (asInt(record['late_minutes']) ?? 0) > 0;
+    final place =
+        text(record['actual_location_name']) ??
+        text(record['location_status']) ??
+        text(record['verification_method']);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    text(record['attendance_date']) ?? '',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (hours != null)
+                  Text(
+                    '${hours.toStringAsFixed(1)}h',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary(context),
+                    ),
+                  ),
+                if (late)
+                  const Padding(
+                    padding: EdgeInsets.only(left: 6),
+                    child: Icon(Icons.schedule, size: 14, color: Colors.orange),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            // Wrap, not a Row: a long location name must not overflow.
+            Wrap(
+              spacing: 12,
+              runSpacing: 2,
+              children: [
+                Text(
+                  'In  ${_time(record['clock_in'])}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary(context),
+                  ),
+                ),
+                Text(
+                  'Out  ${_time(record['clock_out'])}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary(context),
+                  ),
+                ),
+                if (place != null)
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 200),
+                    child: Text(
+                      'Where  $place',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary(context),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

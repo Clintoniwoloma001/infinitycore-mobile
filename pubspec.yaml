@@ -16,7 +16,16 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.1.0+9
+# Continues from the active 1.1.1+10. 1.1.2+11 was created as a draft by a run
+# that was interrupted mid-upload, and Shorebird has no command to promote or
+# delete a draft, so the build number moves to +12 to get a clean, fully
+# uploaded release. Carries: cross-platform RBAC single-source fix, 2-minute
+# background tracking with the offline queue and auto-sync, and SARA tool
+# authorization.
+# Sections 2, 4, 5 executive UI + Branch Performance 42702 fix + executive
+# role constraint + I-Meet audio signed-URL fix.
+# +13 continues from the active 1.1.2+12.
+version: 1.1.4+14
 
 environment:
   sdk: ^3.13.3

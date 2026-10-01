@@ -8,6 +8,7 @@ import 'core/config/env.dart';
 import 'core/services/location_tracking_service.dart';
 import 'core/services/notification_badge.dart';
 import 'core/services/notification_service.dart';
+import 'core/services/permission_service.dart';
 import 'core/services/reminder_service.dart';
 import 'core/services/supabase_service.dart';
 import 'core/theme/theme_controller.dart';
@@ -54,6 +55,12 @@ Future<void> main() async {
   // sign-out and foreground/background transitions. Non-blocking, and it never
   // raises a permission prompt on its own.
   unawaited(LocationTrackingService.instance.init());
+
+  // Effective permissions drive every menu and guard on Android and iOS, from
+  // the SAME backend document the web uses. Started here so the first frame
+  // after sign-in already knows what the account may do, and kept subscribed
+  // afterwards so a grant or revoke reaches the device without a re-login.
+  PermissionService.instance.init();
 
   runApp(const InfinityCoreApp());
 }

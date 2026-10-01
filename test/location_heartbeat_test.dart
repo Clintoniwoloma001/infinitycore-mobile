@@ -12,14 +12,19 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:infinitycore/core/services/location_heartbeat.dart';
+import 'package:infinitycore/core/services/permission_service.dart';
 
 const _sourcePath = 'lib/core/services/location_heartbeat.dart';
+const _permissionPath = 'lib/core/services/permission_service.dart';
 
 void main() {
   group('Heartbeat cadence contract', () {
-    test('requests 30 minutes, never claims it is guaranteed', () {
-      expect(LocationHeartbeat.interval, const Duration(minutes: 30));
-      expect(LocationHeartbeat.interval.inMinutes, 30);
+    test('requests 2 minutes, never claims it is guaranteed', () {
+      // 2 minutes is the requested cadence. It is a REQUEST: Android throttles
+      // background work and iOS may delay updates, so the service records the
+      // real timestamp of every fix and never back-fills a missed one.
+      expect(LocationHeartbeat.interval, const Duration(minutes: 2));
+      expect(LocationHeartbeat.interval.inMinutes, 2);
     });
 
     test('refuses to record a fix older than 5 minutes', () {
@@ -92,22 +97,119 @@ void main() {
       expect(status.summary, contains('No connection'));
     });
 
-    test('freshness window is 45 minutes', () {
+    test('freshness window tracks the 2-minute cadence', () {
+      // Tightened from 45 minutes. With points arriving every 2 minutes, a
+      // 45-minute window would happily label a position from three quarters of
+      // an hour ago as "fresh" — i.e. as live. A couple of missed windows on a
+      // throttled OS is normal, so the window allows for that and no more.
       expect(
         HeartbeatStatus(
           running: true,
-          lastRecordedAt: DateTime.now().subtract(const Duration(minutes: 44)),
+          lastRecordedAt: DateTime.now().subtract(const Duration(minutes: 5)),
         ).hasFreshFix,
         isTrue,
       );
       expect(
         HeartbeatStatus(
           running: true,
-          lastRecordedAt: DateTime.now().subtract(const Duration(minutes: 46)),
+          lastRecordedAt: DateTime.now().subtract(const Duration(minutes: 7)),
         ).hasFreshFix,
         isFalse,
       );
       expect(const HeartbeatStatus().hasFreshFix, isFalse);
+    });
+
+    test('a queued observation survives and is retried without a live capture', () {
+      // The offline contract: nothing is discarded, and a drain is safe to call
+      // when the queue is empty, while signed out, or twice in a row.
+      final source = File(_sourcePath).readAsStringSync();
+
+      expect(source, contains('syncPending'));
+      expect(source, contains('startSyncWatchdog'));
+      // A failed drain must leave the queue alone.
+      expect(source, contains('Queue untouched; retried on the next tick.'));
+      // Entries captured for a different account are still dropped.
+      expect(source, contains('Belongs to another account'));
+    });
+  });
+
+  group('Effective permission precedence (must match web + database)', () {
+    test('super admin is allowed everything', () {
+      const perms = EffectivePermissions(isSuperUser: true, loaded: true);
+      expect(perms.has('hr.payroll.read'), isTrue);
+      expect(perms.has('anything.at.all'), isTrue);
+    });
+
+    test('an explicit DENY beats an explicit ALLOW', () {
+      // This is the documented precedence, and the single most important case:
+      // a revoked permission must survive a role that would otherwise grant it.
+      const perms = EffectivePermissions(
+        allowed: {'hr.payroll.read'},
+        denied: {'hr.payroll.read'},
+        loaded: true,
+      );
+      expect(perms.has('hr.payroll.read'), isFalse);
+    });
+
+    test('an unknown key is denied, not allowed', () {
+      const perms = EffectivePermissions(allowed: {'a'}, loaded: true);
+      expect(perms.has('b'), isFalse);
+    });
+
+    test('fails closed while nothing is loaded', () {
+      // A permission that has not been fetched must not read as granted —
+      // otherwise a cold start briefly shows restricted menu items.
+      const perms = EffectivePermissions();
+      expect(perms.loaded, isFalse);
+      expect(perms.has('hr.employees.read'), isFalse);
+    });
+
+    test('hasAny / hasAll / visibleFrom follow the same rule', () {
+      const perms = EffectivePermissions(
+        allowed: {'employees.read', 'leave.read'},
+        denied: {'leave.read'},
+        loaded: true,
+      );
+      expect(perms.hasAny(['payroll.read', 'employees.read']), isTrue);
+      expect(perms.hasAll(['employees.read', 'leave.read']), isFalse);
+      expect(perms.hasAll(['employees.read']), isTrue);
+      expect(
+        perms.visibleFrom(['employees.read', 'leave.read', 'payroll.read']),
+        {'employees.read'},
+      );
+    });
+  });
+
+  group('Cross-platform consistency', () {
+    test('the service reads the backend document, not a local role matrix', () {
+      final source = File(_permissionPath).readAsStringSync();
+
+      // It must ask the same RPC the web and the backend use.
+      expect(source, contains('get_my_permissions'));
+      // And must NOT re-derive access from a hard-coded role table.
+      expect(source, isNot(contains('ROLE_PERMISSIONS')));
+      expect(source, isNot(contains('ROLE_MODULES')));
+    });
+
+    test('a grant reaches the device without a re-login', () {
+      final source = File(_permissionPath).readAsStringSync();
+      expect(source, contains('onPostgresChanges'));
+      for (final table in ['user_permissions', 'role_permissions']) {
+        expect(source, contains(table));
+      }
+      // Foreground return is the other moment a permission can have changed.
+      expect(source, contains('AppLifecycleState.resumed'));
+      // Nothing is cached on disk, so a relaunch cannot resurrect a stale grant.
+      expect(source, isNot(contains('FlutterSecureStorage')));
+    });
+
+    test('signing out clears every permission immediately', () {
+      final source = File(_permissionPath).readAsStringSync();
+      expect(source, contains('stopRealtime()'));
+      expect(
+        source,
+        contains('no permission outlives the session'),
+      );
     });
   });
 

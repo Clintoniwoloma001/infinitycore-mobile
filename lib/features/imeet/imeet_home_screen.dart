@@ -8,6 +8,7 @@ import '../dashboard/home_shell.dart';
 import 'imeet_models.dart';
 import 'imeet_service.dart';
 import 'widgets/imeet_folder_share_sheet.dart';
+import 'widgets/imeet_schedule_sheet.dart';
 import 'widgets/imeet_widgets.dart';
 
 /// I-Meet home — InfinityCore's meeting intelligence dashboard.
@@ -35,6 +36,9 @@ class _IMeetHomeScreenState extends State<IMeetHomeScreen> {
   void initState() {
     super.initState();
     _load();
+    // Folders populate the scheduler's dropdown and the folder filter chips, so
+    // they are fetched alongside the meetings rather than on first tap.
+    _loadFolders();
     // Realtime so a finished recording appears without a manual refresh.
     _service.subscribe(onChange: _load);
   }
@@ -43,6 +47,20 @@ class _IMeetHomeScreenState extends State<IMeetHomeScreen> {
   void dispose() {
     _service.unsubscribe();
     super.dispose();
+  }
+
+  /// Reload the folders this user owns or has been shared.
+  ///
+  /// A failure here is deliberately swallowed: folders are an organisational
+  /// aid, and a user must still be able to record a meeting when the folder
+  /// list is unavailable.
+  Future<void> _loadFolders() async {
+    try {
+      final f = await _service.listFolders();
+      if (mounted) setState(() => _folders = f);
+    } catch (_) {
+      // Folders are optional; a failure here must not block recording.
+    }
   }
 
   Future<void> _load() async {
@@ -108,6 +126,14 @@ class _IMeetHomeScreenState extends State<IMeetHomeScreen> {
     context.push('/imeet/${m.id}');
   }
 
+  /// Long-press a tile to edit, reschedule or cancel it without hunting for a
+  /// detail menu. Tapping still opens the meeting, so the common path is
+  /// unchanged.
+  void _editMeeting(IMeetMeeting m) {
+    if (m.status == IMeetStatus.cancelled) return; // nothing left to edit
+    _openScheduler(meeting: m);
+  }
+
   Future<void> _quickRecord() async {
     final opened = await showModalBottomSheet<bool>(
       context: context,
@@ -115,6 +141,26 @@ class _IMeetHomeScreenState extends State<IMeetHomeScreen> {
       builder: (_) => _NewMeetingSheet(onStart: _startRecording),
     );
     if (opened == true && mounted) _load();
+  }
+
+  /// Plan a future meeting, or edit/cancel an existing one.
+  ///
+  /// Separate from [quickRecord] on purpose: recording is "capture what is
+  /// happening right now", scheduling is "put something on the calendar".
+  /// Sharing one sheet for both made people assume a recording had already
+  /// started when it had not.
+  Future<void> _openScheduler({IMeetMeeting? meeting}) async {
+    final saved = await IMeetScheduleSheet.show(
+      context,
+      meeting: meeting,
+      folders: _folders,
+      onChanged: () async {
+        // A new folder may have been created inside the sheet, so refresh them
+        // before the caller redraws anything that lists folders.
+        await _loadFolders();
+      },
+    );
+    if (saved == true && mounted) _load();
   }
 
   Future<void> _startRecording({
@@ -166,6 +212,21 @@ class _IMeetHomeScreenState extends State<IMeetHomeScreen> {
                       ),
                     ),
                   ),
+                  const SizedBox(height: 10),
+                  // Scheduling sits beside recording rather than inside it:
+                  // planning a future meeting must not look like a capture has
+                  // already started.
+                  OutlinedButton.icon(
+                    onPressed: _openScheduler,
+                    icon: const Icon(Icons.event_available, size: 20),
+                    label: const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 12),
+                      child: Text(
+                        'Schedule Meeting',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 18),
                   if (_processing.isNotEmpty) ...[
                     _SectionHeader(
@@ -199,6 +260,9 @@ class _IMeetHomeScreenState extends State<IMeetHomeScreen> {
                       IMeetMeetingTile(
                         meeting: m,
                         onTap: () => _openMeeting(m),
+                        // Upcoming meetings are the ones worth editing, so
+                        // long-press is offered here rather than on history.
+                        onLongPress: () => _editMeeting(m),
                       ),
                   const SizedBox(height: 16),
                   _SectionHeader(label: 'Recent', icon: Icons.timelapse),

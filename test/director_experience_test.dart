@@ -2,11 +2,14 @@
 // Phase 70 mobile - director experience + executive routing
 // ============================================================================
 // Pure/unit tests only. No Supabase session and no network.
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:infinitycore/core/security/role_guard.dart';
 import 'package:infinitycore/core/routing/auth_gate.dart';
+import 'package:infinitycore/features/dashboard/app_menu.dart';
 import 'package:infinitycore/features/director/director_service.dart';
+import 'package:infinitycore/features/director/director_shell.dart';
 
 /// Minimal AuthGateState so the routing rules can be exercised directly.
 class _Auth implements AuthGateState {
@@ -320,6 +323,178 @@ void main() {
     test('iso dates are zero padded', () {
       expect(DirectorPeriod.toIso(DateTime(2026, 1, 5)), '2026-01-05');
       expect(DirectorPeriod.toIso(DateTime(2026, 12, 31)), '2026-12-31');
+    });
+  });
+
+  // Regression guard for the executive Attendance tab rendering "Absent 4220".
+  group('attendance totals are derived from the staff rows', () {
+    Map<String, dynamic> row(Object? expected, Object? present) => {
+      'expected_days': expected,
+      'attendance_present': present,
+    };
+
+    test('sums expected and present days across the roster', () {
+      final t = AttendanceTotals.fromStaff([
+        row(20, 5),
+        row(20, 15),
+        row(20, 0),
+      ]);
+      expect(t.totalStaff, 3);
+      expect(t.expectedDays, 60);
+      expect(t.presentDays, 20);
+      expect(t.absentDays, 40);
+      expect(t.rate, closeTo(33.3, 0.1));
+    });
+
+    test('present and absent are STAFF headcounts, not days', () {
+      // Two of the three people worked at least one day, so two are "present"
+      // and one is "absent" - even though the day totals are 20 present days.
+      // This is the distinction that stopped the screen showing "Absent 4220"
+      // against a 211-person roster.
+      final t = AttendanceTotals.fromStaff([
+        row(20, 5),
+        row(20, 15),
+        row(20, 0),
+      ]);
+      expect(t.presentStaff, 2);
+      expect(t.absentStaff, 1);
+      expect(t.presentStaff, lessThanOrEqualTo(t.totalStaff));
+    });
+
+    test('a partly-attending person counts as present, not absent', () {
+      final t = AttendanceTotals.fromStaff([
+        row(20, 1),
+        row(20, 0),
+      ]);
+      expect(t.presentStaff, 1);
+      expect(t.absentStaff, 1);
+    });
+
+    test(
+      'absent staff plus present staff always equals the roster size',
+      () {
+        final t = AttendanceTotals.fromStaff([
+          row(20, 5),
+          row(20, 0),
+          row(20, 20),
+          row(20, 3),
+        ]);
+        expect(t.absentStaff + t.presentStaff, t.totalStaff);
+      },
+    );
+
+    test(
+      'an empty roster reports zero rather than dividing by zero',
+      () {
+        final t = AttendanceTotals.fromStaff(const []);
+        expect(t.totalStaff, 0);
+        expect(t.expectedDays, 0);
+        expect(t.presentDays, 0);
+        expect(t.absentDays, 0);
+        expect(t.presentStaff, 0);
+        expect(t.absentStaff, 0);
+        expect(t.rate, 0);
+      },
+    );
+
+    test('a fully attending roster has no absences', () {
+      final t = AttendanceTotals.fromStaff([row(20, 20), row(20, 20)]);
+      expect(t.absentDays, 0);
+      expect(t.absentStaff, 0);
+      expect(t.presentStaff, 2);
+      expect(t.rate, 100);
+    });
+
+    test('absences never go negative on inconsistent server data', () {
+      // A corrected/re-run record can leave present above expected. Rendering a
+      // negative absence would be nonsense to a director, so it clamps to zero.
+      final t = AttendanceTotals.fromStaff([row(5, 7)]);
+      expect(t.absentDays, 0);
+    });
+
+    test('missing or non-numeric fields count as zero, not as a crash', () {
+      final t = AttendanceTotals.fromStaff([
+        <String, dynamic>{'expected_days': null, 'attendance_present': null},
+        <String, dynamic>{},
+        row('3', '1'),
+      ]);
+      expect(t.expectedDays, 3);
+      expect(t.presentDays, 1);
+      expect(t.absentDays, 2);
+    });
+
+    test(
+      'reproduces the production 4220 as expected slots, not absent people',
+      () {
+        // 211 staff x 20 expected days was the figure the screen showed under
+        // the label "Absent". Under the new STAFF-headcount basis the same
+        // roster with nobody clocked in reports 211 absent STAFF - bounded by
+        // the roster, so it cannot be misread - while the 4220 survives only
+        // as an explicitly labelled day count.
+        final roster = List.generate(
+          211,
+          (_) => row(20, 0),
+          growable: false,
+        );
+        final t = AttendanceTotals.fromStaff(roster);
+        expect(t.totalStaff, 211);
+        expect(t.presentStaff, 0);
+        expect(t.absentStaff, 211);
+        expect(t.expectedDays, 4220);
+        expect(t.absentDays, 4220);
+        expect(t.rate, 0);
+      },
+    );
+
+    test('an absent headcount can never exceed the roster', () {
+      // Guards the invariant that makes the figure trustworthy: whatever the
+      // server sends, "absent staff" stays within the bounds of the roster.
+      final t = AttendanceTotals.fromStaff([
+        row(5, 7),
+        row(5, 9),
+      ]);
+      expect(t.absentStaff, lessThanOrEqualTo(t.totalStaff));
+      expect(t.absentStaff, greaterThanOrEqualTo(0));
+      expect(t.presentStaff, lessThanOrEqualTo(t.totalStaff));
+    });
+  });
+
+  // Regression guard for the executive shell having no app bar at all, which
+  // made Profile, I-Meet, Messages, Notifications, Training and Automation
+  // unreachable from the director view even though every one was routed.
+  group('DirectorShell exposes the app menu', () {
+    testWidgets('renders an app bar with the menu and bell', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(home: DirectorShell()),
+      );
+      await tester.pump();
+
+      expect(find.byType(AppBar), findsOneWidget);
+      expect(find.text('Director'), findsOneWidget);
+      // The hamburger and the notification bell are what make the executive
+      // destinations reachable; both come from appHeaderActions().
+      expect(find.byType(AppMenuButton), findsOneWidget);
+      expect(find.byType(NotificationBellButton), findsOneWidget);
+    });
+
+    testWidgets('the title tracks the selected tab', (tester) async {
+      await tester.pumpWidget(const MaterialApp(home: DirectorShell()));
+      await tester.pump();
+      expect(find.text('Director'), findsOneWidget);
+
+      await tester.tap(find.text('Attendance'));
+      await tester.pump();
+      expect(find.text('Attendance'), findsWidgets);
+    });
+
+    testWidgets('exactly one app bar, never a stacked pair', (tester) async {
+      // The tabs used to supply their own AppBar. Once the shell added one the
+      // two would stack and eat vertical space, so the tabs' bars were removed.
+      // This guards that arrangement from silently regressing in either
+      // direction.
+      await tester.pumpWidget(const MaterialApp(home: DirectorShell()));
+      await tester.pump();
+      expect(find.byType(AppBar), findsOneWidget);
     });
   });
 }

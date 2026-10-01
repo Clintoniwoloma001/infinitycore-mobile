@@ -107,16 +107,10 @@ List<AppDestination> appDestinations() => const [
 
   // Automation Command Centre.
   //
-  // OWNERSHIP: on web this lives in the Audit & Compliance group, so it is
-  // tagged AUDIT here and mirrors the web filtering exactly.
-  //
-  // KNOWN WEB INCONSISTENCY, mirrored deliberately so the two platforms keep
-  // agreeing: the `automation.portfolio.read` permission is also granted to
-  // head_of_human_resources and head_of_e_business, but the web tags the
-  // Command Centre as Audit-only, so those roles are filtered OUT of the
-  // menu even though the server would let them read it. Mirrored rather than
-  // "fixed", because the web file is declared authoritative; reported to the
-  // web team rather than quietly diverging.
+  // OWNERSHIP: on web this lives in the Audit & Compliance group. Mobile keeps
+  // the AUDIT tag so the department filter still governs it, but the executive
+  // viewer family is granted an explicit override in [visibleDestinations] -
+  // see the note there for why mirroring the web filter exactly was not enough.
   AppDestination(
     id: 'automation',
     label: 'Automation Command Centre',
@@ -150,28 +144,48 @@ List<AppDestination> appDestinations() => const [
 
 /// True when [role] may open the Automation Command Centre.
 ///
-/// Mirrors the `automation.portfolio.read` grants seeded in the web migration
-/// 20260927000001 (super_admin, admin, head_of_audit, head_of_human_resources,
-/// head_of_e_business). This narrows what the MENU shows; the RPC is the real
-/// authority and currently does not enforce it on reads - see the final report.
-bool canViewAutomation(String? role) => const [
-  AppRoles.superAdmin,
-  AppRoles.admin,
-  AppRoles.headOfAudit,
-  AppRoles.headOfHumanResources,
-  AppRoles.headOfEBusiness,
-].contains(role);
+/// The Audit department tag alone was not enough for the executive audience: a
+/// Director, Chairman or MD/CEO is tagged `department: executive`, so
+/// `canSeeDepartment` filtered the Audit-owned Automation destination out of
+/// their menu entirely. That is why the Command Centre was unreachable from the
+/// director shell even though the route exists and the server would serve it.
+///
+/// This screen is READ-ONLY on mobile (status changes are web-only), so the
+/// executives need it for oversight, which is exactly the use the MD/CEO has of
+/// department automation completion. [AppRoles.isExecutiveViewer] is used rather
+/// than listing the three roles so no future executive variant is forgotten.
+bool canViewAutomation(String? role) =>
+    const [
+      AppRoles.superAdmin,
+      AppRoles.admin,
+      AppRoles.headOfAudit,
+      AppRoles.headOfHumanResources,
+      AppRoles.headOfEBusiness,
+    ].contains(role) ||
+    (role != null && AppRoles.isExecutiveViewer(role));
 
 /// The destinations a user may see, in menu order.
 ///
 /// [AppDestination.department] is applied first, then any destination that
 /// needs a capability check of its own. Both filters are UX only.
+///
+/// AUTOMATION is the one exception to the department-first order. It is owned
+/// by Audit, but the executive viewer family (Director, Chairman, MD/CEO) is
+/// stored under the `executive` department and so never matches `audit`. Those
+/// roles are granted it explicitly through [canViewAutomation] - which is
+/// checked first - because the Command Centre is read-only on mobile and
+/// department oversight is precisely what an MD/CEO needs it for. Without this
+/// the destination was routed and authorised but permanently invisible.
 List<AppDestination> visibleDestinations() {
   final auth = AuthService.instance;
   final role = auth.role;
 
   return appDestinations()
-      .where((d) => canSeeDepartment(role, d.department, auth.department))
+      .where(
+        (d) =>
+            (d.id == 'automation' && canViewAutomation(role)) ||
+            canSeeDepartment(role, d.department, auth.department),
+      )
       .where(
         (d) => switch (d.id) {
           'automation' => canViewAutomation(role),

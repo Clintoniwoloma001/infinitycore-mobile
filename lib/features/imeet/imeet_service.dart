@@ -35,6 +35,7 @@ class IMeetService {
     String? folderId,
     int limit = 50,
     int offset = 0,
+    bool includeCancelled = false,
   }) async {
     // Apply the filter BEFORE order/range: those return a transform builder,
     // and composing a filter onto one is a different (and here unavailable)
@@ -47,8 +48,13 @@ class IMeetService {
           'created_at, updated_at',
         );
     final filtered = folderId == null ? base : base.eq('folder_id', folderId);
+    // A cancelled meeting is kept for the audit trail but must not clutter the
+    // working list, so it is filtered out unless explicitly asked for.
+    final live = includeCancelled
+        ? filtered
+        : filtered.neq('status', 'cancelled');
     final rows = _rows(
-      await filtered
+      await live
           .order('started_at', ascending: false)
           .range(offset, offset + limit - 1),
     );
@@ -123,15 +129,31 @@ class IMeetService {
   /// A short-lived signed URL for playback.
   ///
   /// Audio is never fetched with a public or bearer URL: the server re-checks
-  /// access and mints a URL that expires (section 20/31).
+  /// access first and only then reveals the storage path, and the bucket stays
+  /// private.
+  ///
+  /// WHY TWO STEPS
+  /// `imeet_sign_recording` used to be asked for a ready-made URL, but it
+  /// signed the object by calling `storage.create_signed_url(...)` — a function
+  /// that does not exist in this deployment. The call failed with SQLSTATE
+  /// 42883 and the app surfaced "Could not save the recording" every time
+  /// somebody pressed Play or Save. Supabase signs object URLs in the Storage
+  /// service, not in Postgres, so the RPC now does the authorisation and
+  /// returns the PATH, and the signed URL is minted here through the Storage
+  /// API — the same call the rest of the app already uses for avatars and
+  /// documents.
   Future<String?> signedAudioUrl(String recordingId) async {
     final res = await SupabaseService.client.rpc<Map<String, dynamic>>(
       'imeet_sign_recording',
       params: {'p_recording_id': recordingId},
     );
-    final url = res['url'] as String?;
-    if (url == null || url.isEmpty) return null;
-    return url;
+    final path = res['path'] as String?;
+    if (path == null || path.isEmpty) return null;
+    final bucket = (res['bucket'] as String?) ?? 'i-meet-audio';
+    final signed = await SupabaseService.client.storage
+        .from(bucket)
+        .createSignedUrl(path, (res['expires_seconds'] as int?) ?? 300);
+    return signed;
   }
 
   /// Folders the caller owns PLUS folders shared with them.
@@ -205,55 +227,77 @@ class IMeetService {
   ///
   /// This is a convenience lookup for the picker, NOT an authorization
   /// decision — the server re-checks ownership of the folder regardless.
+  ///
+  /// It goes through the `imeet_shareable_people` RPC rather than reading
+  /// `profiles` directly. A direct read either trips over profiles' own RLS
+  /// (returning nothing, so the picker appeared permanently empty) or hands
+  /// every signed-in user the whole staff directory. The RPC returns only the
+  /// three fields a picker needs and never includes the caller.
   Future<List<Map<String, dynamic>>> shareablePeople(String folderId) async {
-    final rows = _rows(
-      await SupabaseService.client
-          .from('profiles')
-          .select('id, full_name, email, role, department')
-          .eq('status', 'active')
-          .order('full_name'),
+    final res = await SupabaseService.client.rpc<Map<String, dynamic>>(
+      'imeet_shareable_people',
+      params: {'p_exclude_folder_id': folderId},
     );
-    return rows;
+    final list = (res['people'] as List<dynamic>?) ?? const [];
+    return [for (final r in list.cast<Map<String, dynamic>>()) r];
   }
 
   // -------------------------------------------------------------------------
   // Write paths
   // -------------------------------------------------------------------------
 
+  /// Create a folder, or return the existing one with the same name.
+  ///
+  /// This MUST go through the `imeet_create_folder` RPC. The previous version
+  /// inserted `{'name': name}` directly, which could never succeed:
+  /// `imeet_folders.owner_id` is NOT NULL and the RLS policy demands it equal
+  /// `auth.uid()`, so an insert that omitted it always failed. That is why
+  /// there was no way to create a folder from the app — and therefore nothing
+  /// to share.
   Future<IMeetFolder> createFolder(String name) async {
-    // Folders are a plain owner-scoped insert; RLS is the boundary.
-    final row = _row(
-      await SupabaseService.client
-          .from('imeet_folders')
-          .insert({'name': name})
-          .select('*')
-          .single(),
+    final res = await SupabaseService.client.rpc<Map<String, dynamic>>(
+      'imeet_create_folder',
+      params: {'p_name': name, 'p_colour': null},
     );
-    return IMeetFolder.fromRow(row);
+    return IMeetFolder.fromRow(_row(res['folder']));
   }
 
   Future<void> renameFolder(String id, String name) async {
-    await SupabaseService.client
-        .from('imeet_folders')
-        .update({'name': name, 'updated_at': DateTime.now().toIso8601String()})
-        .eq('id', id);
+    await SupabaseService.client.rpc<Map<String, dynamic>>(
+      'imeet_rename_folder',
+      params: {'p_folder_id': id, 'p_name': name, 'p_colour': null},
+    );
   }
 
   /// Delete a folder. Meetings inside are UNASSIGNED, not deleted
   /// (section 14) — the FK is ON DELETE SET NULL for exactly this reason, so a
   /// meeting can never be destroyed by tidying a folder.
+  ///
+  /// Routing through an RPC means the owner check is enforced server-side and
+  /// the deletion lands in the audit log, which is the same trail the rest of
+  /// the platform uses.
   Future<void> deleteFolder(String id) async {
-    await SupabaseService.client.from('imeet_folders').delete().eq('id', id);
+    await SupabaseService.client.rpc<Map<String, dynamic>>(
+      'imeet_delete_folder',
+      params: {'p_folder_id': id},
+    );
   }
 
-  Future<void> moveMeetingToFolder(String meetingId, String? folderId) async {
-    await SupabaseService.client
-        .from('imeet_meetings')
-        .update({
-          'folder_id': folderId,
-          'updated_at': DateTime.now().toIso8601String(),
-        })
-        .eq('id', meetingId);
+  /// Move a meeting into (or out of) a folder.
+  ///
+  /// [moveToFolder] must be true for [folderId] to be applied at all. A null
+  /// folderId is indistinguishable from "not supplied" inside Postgres, so
+  /// without the flag, moving a meeting OUT of its folder silently did nothing.
+  Future<void> moveMeetingToFolder(
+    String meetingId,
+    String? folderId, {
+    bool moveToFolder = false,
+  }) async {
+    await updateMeetingDetails(
+      meetingId,
+      folderId: folderId,
+      moveToFolder: moveToFolder,
+    );
   }
 
   Future<void> updateMeeting(
@@ -264,6 +308,89 @@ class IMeetService {
         .from('imeet_meetings')
         .update({...patch, 'updated_at': DateTime.now().toIso8601String()})
         .eq('id', meetingId);
+  }
+
+  // -------------------------------------------------------------------------
+  // Scheduling and meeting management
+  //
+  // Previously a meeting could only be created at the instant you pressed
+  // record, so the "Upcoming" section on the home screen was permanently empty
+  // and there was no way to plan tomorrow's meeting. These go through
+  // server-authorized RPCs that derive identity from the session, so a client
+  // can never schedule a meeting on someone else's behalf.
+  // -------------------------------------------------------------------------
+
+  /// Put a meeting in the future.
+  ///
+  /// Returns the meeting id. Recording it later appends a recording to THIS row
+  /// rather than creating a second meeting, so the schedule and the recording
+  /// are always the same meeting.
+  Future<String> scheduleMeeting({
+    required String title,
+    required DateTime startsAt,
+    String? location,
+    String? description,
+    String? folderId,
+    int? durationMinutes,
+    List<String> participantIds = const [],
+  }) async {
+    final res = await SupabaseService.client.rpc<Map<String, dynamic>>(
+      'imeet_schedule_meeting',
+      params: {
+        'p_title': title,
+        'p_starts_at': startsAt.toUtc().toIso8601String(),
+        'p_location': location,
+        'p_description': description,
+        'p_folder_id': folderId,
+        'p_duration_minutes': durationMinutes,
+        'p_calendar_provider': null,
+        'p_calendar_external_id': null,
+        'p_participant_ids': participantIds.isEmpty ? null : participantIds,
+      },
+    );
+    return '${_row(res['meeting'])['id'] ?? ''}';
+  }
+
+  /// Edit / reschedule / move a meeting between folders.
+  ///
+  /// [moveToFolder] must be true for [folderId] to be applied at all. Without
+  /// it, a null folderId is indistinguishable from "not supplied" inside
+  /// Postgres, and taking a meeting OUT of its folder would silently do
+  /// nothing.
+  Future<void> updateMeetingDetails(
+    String meetingId, {
+    String? title,
+    DateTime? startsAt,
+    String? location,
+    String? description,
+    String? folderId,
+    bool moveToFolder = false,
+    int? durationMinutes,
+    List<String> participantIds = const [],
+  }) async {
+    await SupabaseService.client.rpc<Map<String, dynamic>>(
+      'imeet_update_meeting',
+      params: {
+        'p_meeting_id': meetingId,
+        'p_title': title,
+        'p_starts_at': startsAt?.toUtc().toIso8601String(),
+        'p_location': location,
+        'p_description': description,
+        'p_folder_id': folderId,
+        'p_move_to_folder': moveToFolder,
+        'p_duration_minutes': durationMinutes,
+        'p_participant_ids': participantIds.isEmpty ? null : participantIds,
+      },
+    );
+  }
+
+  /// Cancel a scheduled meeting. The row is KEPT and marked cancelled so the
+  /// audit trail survives.
+  Future<void> cancelMeeting(String meetingId) async {
+    await SupabaseService.client.rpc<Map<String, dynamic>>(
+      'imeet_cancel_meeting',
+      params: {'p_meeting_id': meetingId},
+    );
   }
 
   /// Open (or reuse) a meeting and return the id plus the next sequence.

@@ -45,7 +45,9 @@ class _LeaveOverviewScreenState extends State<LeaveOverviewScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Leave')),
+      // No app bar: DirectorShell supplies it, together with the menu and
+      // notification bell, so the executive can reach Profile, I-Meet,
+      // Training and Automation. See director_shell.dart.
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null

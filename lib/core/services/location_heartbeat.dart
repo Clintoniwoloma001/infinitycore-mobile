@@ -41,7 +41,24 @@ class LocationHeartbeat {
   static final instance = LocationHeartbeat._();
 
   /// The requested cadence. A request, not a guarantee.
-  static const Duration interval = Duration(minutes: 30);
+  ///
+  /// Two minutes is the platform-accurate value: it matches the finest
+  /// continuous background window Android grants a foreground location service
+  /// and the finest continuous update interval iOS permits with Always
+  /// authorization, so the timer asks for exactly what the OS can actually
+  /// deliver instead of asking for something it will throttle.
+  ///
+  /// Configurable through [DART_DEFINE_LOCATION_INTERVAL_MINUTES] at build time
+  /// so staging can be slowed down without a code change. Guarded: a malformed
+  /// or absurd value falls back to the default rather than pinning the battery.
+  static Duration get interval {
+    const raw = String.fromEnvironment('LOCATION_INTERVAL_MINUTES');
+    final minutes = int.tryParse(raw);
+    if (minutes == null || minutes < 1 || minutes > 60) {
+      return const Duration(minutes: 2);
+    }
+    return Duration(minutes: minutes);
+  }
 
   /// Never record a fix this stale: it would misrepresent where someone is.
   static const Duration maxFixAge = Duration(minutes: 5);
@@ -59,6 +76,17 @@ class LocationHeartbeat {
   bool _running = false;
   bool _inFlight = false;
   int _pendingCount = 0;
+
+  /// Guards against two drains racing (a resume callback plus a watchdog tick).
+  bool _syncing = false;
+
+  /// Drains the queue when connectivity returns.
+  Timer? _syncTimer;
+
+  /// How often a non-empty queue is retried. Short enough that a restored
+  /// connection is picked up promptly, long enough not to hammer a radio that
+  /// is still down.
+  static const Duration _syncPollInterval = Duration(seconds: 30);
 
   /// The account this device is bound to. Points captured while signed out are
   /// tagged with it and are only ever released to the SAME account, so a second
@@ -158,6 +186,10 @@ class LocationHeartbeat {
     _localOnly = false;
     unawaited(captureOnce());
     _timer ??= Timer.periodic(interval, (_) => unawaited(captureOnce()));
+    // Anything captured while offline is drained as soon as a connection is
+    // usable, without waiting for the next 2-minute capture window.
+    startSyncWatchdog();
+    unawaited(syncPending());
   }
 
   /// Keep capturing on device, upload nothing.
@@ -188,10 +220,21 @@ class LocationHeartbeat {
   Future<void> stop() async {
     _timer?.cancel();
     _timer = null;
+    stopSyncWatchdog();
     _running = false;
     _localOnly = false;
     await _storage.delete(key: _enabledKey);
     status.value = const HeartbeatStatus();
+  }
+
+  /// Re-attempt delivery of anything captured while offline.
+  ///
+  /// Called when the app returns to the foreground. Android may have killed the
+  /// isolate while backgrounded, so a queued point could otherwise sit until the
+  /// next capture window even though the network came back minutes earlier.
+  Future<void> onResumed() async {
+    if (!_running) return;
+    await syncPending();
   }
 
   // NOTE: the old `restoreIfEnabled()` (resume only if the employee had
@@ -415,6 +458,50 @@ class LocationHeartbeat {
     await _writeQueue(remaining);
   }
 
+  /// Upload everything queued, oldest first.
+  ///
+  /// Public and idempotent so it can be driven by whatever the platform offers:
+  /// a resume callback, a periodic watchdog, or a manual "retry now". Safe when
+  /// the queue is empty and while signed out.
+  ///
+  /// Never throws: a failure leaves the queue exactly as it was, so the next
+  /// attempt still has every point. The server dedupes on the observation
+  /// identity, so a batch that was actually accepted but whose acknowledgement
+  /// was lost is retried without creating a duplicate row.
+  Future<void> syncPending() async {
+    if (_localOnly) return; // no session: nothing may be attributed
+    if (_syncing) return; // a drain is already running
+    _syncing = true;
+    try {
+      await _flushQueue();
+    } catch (_) {
+      // Queue untouched; retried on the next tick.
+    } finally {
+      _syncing = false;
+    }
+  }
+
+  /// Start the bounded retry loop that drains the queue once a connection
+  /// returns.
+  ///
+  /// WHY A POLL RATHER THAN A CONNECTIVITY PLUGIN
+  /// A connectivity plugin reports that a network interface is associated, which
+  /// is not the same as the database being reachable — a captive portal or a
+  /// Wi-Fi link with no route both look "connected". Probing the real upload is
+  /// the only signal that predicts success, and it avoids adding a native plugin
+  /// so the change stays deliverable as a Shorebird patch.
+  void startSyncWatchdog() {
+    _syncTimer?.cancel();
+    _syncTimer = Timer.periodic(_syncPollInterval, (_) {
+      if (_pendingCount > 0) unawaited(syncPending());
+    });
+  }
+
+  void stopSyncWatchdog() {
+    _syncTimer?.cancel();
+    _syncTimer = null;
+  }
+
   /// Observations waiting for a connection.
   Future<int> pendingCount() async {
     final items = await _readQueue();
@@ -446,7 +533,12 @@ class HeartbeatStatus {
   bool get hasFreshFix {
     final at = lastRecordedAt;
     if (at == null) return false;
-    return DateTime.now().difference(at) < const Duration(minutes: 45);
+    // Generous relative to the 2-minute cadence: a couple of missed windows on a
+    // throttled OS is normal, but this must not claim "live" for a position that
+    // is genuinely ancient. Kept well under the old 45-minute figure, which only
+    // made sense for a 30-minute heartbeat and would have mislabled a stale point
+    // as current now that points arrive every 2 minutes.
+    return DateTime.now().difference(at) < const Duration(minutes: 6);
   }
 
   String get summary {

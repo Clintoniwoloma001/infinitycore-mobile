@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 
 import 'director_service.dart';
 import 'director_widgets.dart';
+import 'people_directory_screen.dart';
 import 'department_detail_screen.dart';
 import 'leave_overview_screen.dart';
 import 'role_performance_screen.dart';
@@ -69,93 +70,145 @@ class _DirectorHomeScreenState extends State<DirectorHomeScreen> {
     final s = _snapshot;
     if (s == null) return const SizedBox.shrink();
 
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-        children: [
-          _PeriodSelector(
-            period: _period,
-            onChanged: (p) {
-              setState(() => _period = p);
-              _load();
-            },
-          ),
-          const SizedBox(height: 12),
-          MetricStrip(
-            tiles: [
-              MetricTile(
-                label: 'Total staff',
-                value: fmtInt(s.summary['total_staff']),
-                icon: Icons.groups_outlined,
-              ),
-              MetricTile(
-                label: 'On leave',
-                value: fmtInt(s.summary['on_leave']),
-                icon: Icons.beach_access_outlined,
-              ),
-              MetricTile(
-                label: 'Absent',
-                value: fmtInt(s.summary['absent']),
-                icon: Icons.person_off_outlined,
-              ),
-              MetricTile(
-                label: 'Attendance',
-                value: fmtPct(s.summary['attendance_rate']),
-                icon: Icons.schedule_outlined,
-              ),
-              MetricTile(
-                label: 'KPI completion',
-                value: fmtPct(s.summary['kpi_completion']),
-                icon: Icons.flag_outlined,
-              ),
-              MetricTile(
-                label: 'Target completion',
-                value: fmtPct(s.summary['target_completion']),
-                icon: Icons.track_changes_outlined,
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          _BusinessStrip(loans: s.loans, branches: s.branches, areas: s.areas),
-          const SizedBox(height: 16),
-          const SectionHeader(title: 'DEPARTMENTS'),
-          _DepartmentCarousel(
-            departments: s.departments,
-            onOpen: (d) => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => DepartmentDetailScreen(
-                  department:
-                      text(d['name']) ?? text(d['department']) ?? 'Department',
-                  raw: d,
+    // Headcounts for the selected period. Computed once here so the Present and
+    // Absent tiles below cannot drift apart from each other.
+    final attendance = AttendanceTotals.fromStaff(s.staff);
+    final presentStaff = fmtInt(attendance.presentStaff);
+    final absentStaff = fmtInt(attendance.absentStaff);
+    final periodLabel = _period.label.toLowerCase();
+
+    // SafeArea: the period pills sit at the very top of this list with no app
+    // bar above them, so without this they were drawn underneath the status
+    // bar / notch on a notched device. `top` only — the bottom inset is already
+    // handled by the shell's NavigationBar, and adding it here would double the
+    // gap.
+    return SafeArea(
+      bottom: false,
+      child: RefreshIndicator(
+        onRefresh: _load,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+          children: [
+            _PeriodSelector(
+              period: _period,
+              onChanged: (p) {
+                setState(() => _period = p);
+                _load();
+              },
+            ),
+            const SizedBox(height: 12),
+            // "Absent" and "Present" are STAFF headcounts for the selected
+            // period, not attendance-DAY totals. The server's `summary.absent`
+            // is `expected_days - attendance_present` with a flat 20
+            // expected_days per employee, which rendered as "Absent 4220"
+            // (= 211 staff x 20 days) and read as "4220 people are absent".
+            // AttendanceTotals derives the person counts from the same staff
+            // rows the web shows, and can never exceed the roster size.
+            // See [AttendanceTotals] for the full rationale.
+            MetricStrip(
+              tiles: [
+                MetricTile(
+                  label: 'Total staff',
+                  value: fmtInt(s.summary['total_staff']),
+                  icon: Icons.groups_outlined,
+                ),
+                MetricTile(
+                  label: 'On leave',
+                  value: fmtInt(s.summary['on_leave']),
+                  icon: Icons.beach_access_outlined,
+                ),
+                MetricTile(
+                  label: 'Present',
+                  value: presentStaff,
+                  icon: Icons.person_outline,
+                  // Names the basis and the window, so a headcount is never
+                  // misread as a day count.
+                  caption: 'staff · $periodLabel',
+                ),
+                MetricTile(
+                  label: 'Absent',
+                  value: absentStaff,
+                  icon: Icons.person_off_outlined,
+                  caption: 'staff · $periodLabel',
+                ),
+                MetricTile(
+                  label: 'Attendance',
+                  value: fmtPct(s.summary['attendance_rate']),
+                  icon: Icons.schedule_outlined,
+                ),
+                MetricTile(
+                  label: 'KPI completion',
+                  value: fmtPct(s.summary['kpi_completion']),
+                  icon: Icons.flag_outlined,
+                ),
+                MetricTile(
+                  label: 'Target completion',
+                  value: fmtPct(s.summary['target_completion']),
+                  icon: Icons.track_changes_outlined,
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _BusinessStrip(
+              loans: s.loans,
+              branches: s.branches,
+              areas: s.areas,
+            ),
+            const SizedBox(height: 16),
+            const SectionHeader(title: 'DEPARTMENTS'),
+            _DepartmentCarousel(
+              departments: s.departments,
+              onOpen: (d) => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => DepartmentDetailScreen(
+                    department:
+                        text(d['name']) ??
+                        text(d['department']) ??
+                        'Department',
+                    raw: d,
+                  ),
                 ),
               ),
             ),
-          ),
-          const SectionHeader(title: 'PEOPLE'),
-          _LeaderList(
-            staff: s.staff,
-            onOpen: (p) => widget.onOpenProfile?.call(p),
-          ),
-          const SizedBox(height: 16),
-          _DrillRow(
-            onLeave: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => const LeaveOverviewScreen(),
+            SectionHeader(
+              title: 'PEOPLE',
+              trailing: TextButton(
+                onPressed: () => showPeopleDirectory(
+                  context,
+                  staff: s.staff,
+                  onOpen: widget.onOpenProfile,
+                ),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+                child: const Text('See all'),
               ),
             ),
-            onRoles: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => const RolePerformanceScreen(),
+            _LeaderList(
+              staff: s.staff,
+              onOpen: (p) => widget.onOpenProfile?.call(p),
+            ),
+            const SizedBox(height: 16),
+            _DrillRow(
+              onLeave: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const LeaveOverviewScreen(),
+                ),
+              ),
+              onRoles: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const RolePerformanceScreen(),
+                ),
+              ),
+              onAttendance: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const AttendanceOverviewScreen(),
+                ),
               ),
             ),
-            onAttendance: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => const AttendanceOverviewScreen(),
-              ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

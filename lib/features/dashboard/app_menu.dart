@@ -53,56 +53,119 @@ Future<void> showAppMenu(BuildContext context) {
         route: '/comm-admin',
       ),
   ];
+  return showAppMenuSheet(context, actions: actions);
+}
+
+/// Opens the menu sheet for an explicit [actions] list.
+///
+/// [showAppMenu] is a thin wrapper that resolves the caller's role first; this
+/// carries the layout and the modal plumbing. The split exists so a widget test
+/// can present the real modal - and therefore inherit the real height
+/// constraint that caused the overflow - while supplying a worst-case row list.
+/// Rendering the sheet in a plain `Scaffold` instead would give it the full
+/// screen height and let a broken layout pass.
+Future<void> showAppMenuSheet(
+  BuildContext context, {
+  required List<AppMenuAction> actions,
+}) {
   return showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
+    // Without this the sheet is capped at 9/16 of the screen. Six destinations
+    // (Profile, Notifications, Training, I-Meet, Automation, Branch Performance,
+    // plus Communication Admin for some roles) need more than that, and the
+    // `Column(mainAxisSize: min)` has no way to shrink, so the last rows
+    // overflowed off-screen - observed on iOS as "BOTTOM OVERFLOWED BY 139
+    // PIXELS" with Branch Performance cut in half.
+    //
+    // `isScrollControlled` lets the sheet size to its content up to the cap set
+    // in the builder, and the content scrolls when even that is not enough.
+    isScrollControlled: true,
     backgroundColor: AppColors.surface(context),
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
-    builder: (sheetContext) => SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 10),
-            child: Text(
-              'Menu',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-                color: AppColors.textPrimary(sheetContext),
-              ),
-            ),
-          ),
-          for (final action in actions)
-            ListTile(
-              leading: Icon(action.icon, color: AppColors.accent(sheetContext)),
-              title: Text(
-                action.label,
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary(sheetContext),
-                ),
-              ),
-              subtitle: Text(
-                action.subtitle,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: AppColors.textSecondary(sheetContext),
-                ),
-              ),
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                context.push(action.route);
-              },
-            ),
-          const SizedBox(height: 8),
-        ],
-      ),
+    builder: (sheetContext) => AppMenuSheet(
+      actions: actions,
+      onSelected: (route) => context.push(route),
     ),
   );
+}
+
+/// The body of the top-right menu sheet.
+///
+/// Split out from [showAppMenuSheet] so the layout can be reasoned about and
+/// reused without the modal plumbing. The height cap plus the scroll view live
+/// here, and together they are what stop the destinations being clipped.
+class AppMenuSheet extends StatelessWidget {
+  const AppMenuSheet({super.key, required this.actions, this.onSelected});
+
+  final List<AppMenuAction> actions;
+  final ValueChanged<String>? onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    // Cap just below the full height so the drag handle and the home indicator
+    // stay reachable, and the sheet never covers the whole screen.
+    final maxHeight = MediaQuery.sizeOf(context).height * 0.85;
+    return SafeArea(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxHeight),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 10),
+                child: Text(
+                  'Menu',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary(context),
+                  ),
+                ),
+              ),
+              for (final action in actions)
+                ListTile(
+                  leading: Icon(action.icon, color: AppColors.accent(context)),
+                  title: Text(
+                    action.label,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary(context),
+                    ),
+                  ),
+                  subtitle: Text(
+                    action.subtitle,
+                    // Long department names (e.g. "Department of Marketing,
+                    // Communications and IT") would otherwise grow the row and
+                    // add to the height the sheet has to fit into.
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textSecondary(context),
+                    ),
+                  ),
+                  onTap: () {
+                    final handler = onSelected;
+                    if (handler == null) {
+                      Navigator.of(context).pop();
+                    } else {
+                      Navigator.of(context).pop();
+                      handler(action.route);
+                    }
+                  },
+                ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// Three-line horizontal menu trigger.

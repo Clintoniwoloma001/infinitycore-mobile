@@ -17,12 +17,24 @@ class MetricTile extends StatelessWidget {
     required this.value,
     this.delta,
     this.icon,
+    this.caption,
   });
 
   final String label;
   final String? value;
   final double? delta;
   final IconData? icon;
+
+  /// Small non-numeric qualifier shown under the value, e.g. "staff · this
+  /// month".
+  ///
+  /// This is deliberately NOT [delta]. `delta` renders as a signed percentage
+  /// ("+12% vs previous"), which is a period-over-period movement. Some figures
+  /// instead need to say WHAT they count and over WHICH window - an attendance
+  /// headcount of 34 is a different quantity from 34 expected days, and only the
+  /// caption keeps those two readings apart. The caption is suppressed when a
+  /// delta is present so the tile never stacks two competing sub-lines.
+  final String? caption;
 
   @override
   Widget build(BuildContext context) {
@@ -81,6 +93,17 @@ class MetricTile extends StatelessWidget {
                     : down
                     ? const Color(0xFFB91C1C)
                     : AppColors.textSecondary(context),
+              ),
+            )
+          else if (caption != null)
+            Text(
+              caption!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textSecondary(context),
               ),
             ),
         ],

@@ -7,7 +7,22 @@
 library;
 
 /// Where a meeting is in the pipeline. Mirrors the DB check constraint.
-enum IMeetStatus { draft, recording, processing, ready, failed, archived }
+enum IMeetStatus {
+  draft,
+
+  /// A future meeting with no recording yet. Reachable now that
+  /// `imeet_schedule_meeting` exists; previously nothing could set this.
+  scheduled,
+  recording,
+  processing,
+  ready,
+  failed,
+
+  /// Deliberately called off. The row is kept for the audit trail, and the
+  /// default queries filter it out so it never clutters the list.
+  cancelled,
+  archived,
+}
 
 /// Per-recording pipeline state. Transcribe and summarise are separate on
 /// purpose, so one failing never destroys the other's output.
@@ -23,10 +38,12 @@ enum IMeetStage {
 extension IMeetStatusX on IMeetStatus {
   String get label => switch (this) {
     IMeetStatus.draft => 'Draft',
+    IMeetStatus.scheduled => 'Scheduled',
     IMeetStatus.recording => 'Recording',
     IMeetStatus.processing => 'Processing',
     IMeetStatus.ready => 'Ready',
     IMeetStatus.failed => 'Failed',
+    IMeetStatus.cancelled => 'Cancelled',
     IMeetStatus.archived => 'Archived',
   };
 
@@ -68,6 +85,16 @@ class IMeetMeeting {
   /// True while a recording is still moving through the pipeline.
   bool get isProcessing =>
       status == IMeetStatus.processing || status == IMeetStatus.recording;
+
+  /// A meeting that has been planned but has not happened yet. The "Upcoming"
+  /// list is built from these.
+  bool get isUpcoming =>
+      status == IMeetStatus.scheduled &&
+      (startedAt?.toLocal().isAfter(DateTime.now()) ?? false);
+
+  /// True once the meeting's start time has passed, whether or not anything was
+  /// recorded. Used to decide whether a scheduled meeting is now recordable.
+  bool get hasStarted => startedAt?.toLocal().isBefore(DateTime.now()) ?? false;
 
   factory IMeetMeeting.fromRow(Map<String, dynamic> r) => IMeetMeeting(
     id: '${r['id'] ?? ''}',

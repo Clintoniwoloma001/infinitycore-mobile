@@ -25,6 +25,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String? _error;
   bool _loading = true;
 
+  /// Which calendar month the metric cards are reporting on.
+  ///
+  /// Null means "this month". Held as a full [DateTime] (day component ignored)
+  /// so the selector can step backwards without carrying year/month arithmetic
+  /// through the widget tree.
+  DateTime? _month;
+
+  /// The four metric cards and the history below them describe exactly this
+  /// month, so the label on the filter is what tells the reader whether "Days
+  /// present" means this month or the one they just selected.
+  DateTime get _effectiveMonth {
+    final now = DateTime.now();
+    return DateTime(now.year, _month?.year ?? now.year, _month?.month ?? now.month);
+  }
+
+  /// Months offered by the filter: the current month plus the previous [depth]
+  /// months. Attendance history is fetched as a rolling window, so offering
+  /// months beyond that would show an empty card for no reason.
+  List<DateTime> _monthOptions({int depth = 5}) {
+    final now = DateTime.now();
+    return [
+      for (var i = 0; i < depth; i++)
+        DateTime(now.year, now.month - i, 1),
+    ];
+  }
+
   @override
   void initState() {
     super.initState();
@@ -95,7 +121,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(height: 12),
             _TodayCard(snapshot: snapshot, onGoToTab: widget.onGoToTab),
             const SizedBox(height: 12),
-            _MetricsGrid(metrics: snapshot.metrics),
+            // The month the four cards below are reporting on. Placed directly
+            // above them so the reader never sees a figure without knowing
+            // which month it belongs to.
+            _MonthFilter(
+              months: _monthOptions(),
+              selected: _effectiveMonth,
+              onChanged: (m) => setState(() => _month = m),
+            ),
+            const SizedBox(height: 12),
+            _MetricsGrid(
+              metrics: DashboardMetrics.fromRecords(
+                snapshot.recentAttendance,
+                month: _effectiveMonth,
+              ),
+              month: _effectiveMonth,
+            ),
             if (widget.onGoToManagement != null) ...[
               const SizedBox(height: 12),
               OutlinedButton.icon(
@@ -424,13 +465,76 @@ class _TodayCard extends StatelessWidget {
   }
 }
 
-class _MetricsGrid extends StatelessWidget {
-  const _MetricsGrid({required this.metrics});
+/// Horizontal month picker for the staff dashboard.
+///
+/// The four metric cards are calendar-month figures, so without this a reader
+/// could not tell whether "Late days" meant today, this month, or the month
+/// before last. Only months that can actually have data are offered - the list
+/// comes from the caller, which bounds it to the fetched attendance window.
+class _MonthFilter extends StatelessWidget {
+  const _MonthFilter({
+    required this.months,
+    required this.selected,
+    required this.onChanged,
+  });
 
-  final DashboardMetrics metrics;
+  /// Offerable months, newest first.
+  final List<DateTime> months;
+
+  /// The month currently being reported on.
+  final DateTime selected;
+
+  final ValueChanged<DateTime> onChanged;
 
   @override
   Widget build(BuildContext context) {
+    if (months.length < 2) return const SizedBox.shrink();
+
+    return SizedBox(
+      height: 36,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: months.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (context, i) {
+          final m = months[i];
+          final isSelected = m.year == selected.year && m.month == selected.month;
+          final isCurrent = m.year == DateTime.now().year && m.month == DateTime.now().month;
+          final label = isCurrent
+              ? 'This month'
+              : Fmt.monthYear(m);
+
+          return ChoiceChip(
+            label: Text(label),
+            selected: isSelected,
+            onSelected: (_) => onChanged(m),
+            visualDensity: VisualDensity.compact,
+            labelStyle: TextStyle(
+              fontSize: 12,
+              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+              color: isSelected
+                  ? AppColors.accent(context)
+                  : AppColors.textSecondary(context),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _MetricsGrid extends StatelessWidget {
+  const _MetricsGrid({required this.metrics, required this.month});
+
+  final DashboardMetrics metrics;
+
+  /// The calendar month these figures describe. Named on the cards so a figure
+  /// is never read as "this month" when a past month is selected.
+  final DateTime month;
+
+  @override
+  Widget build(BuildContext context) {
+    final monthLabel = Fmt.monthYear(month);
     return GridView.count(
       crossAxisCount: 2,
       shrinkWrap: true,
@@ -440,17 +544,17 @@ class _MetricsGrid extends StatelessWidget {
       childAspectRatio: 2.1,
       children: [
         StatCard(
-          label: 'Days present',
+          label: 'Days present · $monthLabel',
           value: '${metrics.daysPresent}',
           icon: Icons.event_available,
         ),
         StatCard(
-          label: 'Hours this month',
+          label: 'Hours · $monthLabel',
           value: '${metrics.totalHours.toStringAsFixed(1)}h',
           icon: Icons.timelapse,
         ),
         StatCard(
-          label: 'Late days',
+          label: 'Late days · $monthLabel',
           value: '${metrics.lateDays}',
           icon: Icons.warning_amber_rounded,
           accent: AppColors.amber,
@@ -459,7 +563,7 @@ class _MetricsGrid extends StatelessWidget {
               : '${metrics.onTimeRate.toStringAsFixed(0)}% on time',
         ),
         StatCard(
-          label: 'On-time rate',
+          label: 'On-time rate · $monthLabel',
           value: metrics.daysPresent == 0
               ? '—'
               : '${metrics.onTimeRate.toStringAsFixed(0)}%',

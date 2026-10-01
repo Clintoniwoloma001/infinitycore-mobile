@@ -62,11 +62,20 @@ class DashboardMetrics {
     this.onTimeRate = 0,
   });
 
+  /// Summarises [records] for a single calendar month.
+  ///
+  /// [month] selects which month to report on; it defaults to the month of
+  /// [now]. Every figure is scoped to that month only, so picking a previous
+  /// month genuinely changes the numbers rather than relabelling a fixed
+  /// current-month figure — which is what made "Late days" and "Hours this
+  /// month" ambiguous before a filter existed.
   factory DashboardMetrics.fromRecords(
     List<AttendanceRecord> records, {
     DateTime? now,
+    DateTime? month,
   }) {
     final ref = now ?? DateTime.now();
+    final target = month ?? ref;
 
     final seen = <String>{};
     var hours = 0.0;
@@ -75,7 +84,7 @@ class DashboardMetrics {
       final date = DateTime.tryParse(r.attendanceDate);
       if (date == null) continue;
       final local = date.toLocal();
-      if (local.year != ref.year || local.month != ref.month) continue;
+      if (local.year != target.year || local.month != target.month) continue;
       seen.add(r.attendanceDate.substring(0, 10));
       if (r.clockIn != null) {
         hours += r.workHours > 0 ? r.workHours : 0;

@@ -80,6 +80,9 @@ class LocationTrackingService with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && _started) {
       unawaited(evaluate(reason: 'resumed'));
+      // Drain anything the OS backgrounded us for. Safe to call unconditionally:
+      // syncPending() is a no-op when nothing is queued.
+      unawaited(LocationHeartbeat.instance.onResumed());
     }
   }
 

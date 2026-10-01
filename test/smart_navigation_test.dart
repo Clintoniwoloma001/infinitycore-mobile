@@ -12,10 +12,14 @@
 // They run against the REAL destination registry, so a destination added later
 // without a decision about who sees it fails here rather than leaking to
 // everybody.
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:infinitycore/core/routing/app_destinations.dart';
 import 'package:infinitycore/core/security/navigation_config.dart';
 import 'package:infinitycore/core/security/role_guard.dart';
+import 'package:infinitycore/features/dashboard/app_menu.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// The destinations [role] would see, given an optional stored department.
 ///
@@ -176,6 +180,30 @@ void main() {
       }
     });
 
+    test('the executive viewer family is permitted', () {
+      // DELIBERATE DIVERGENCE from the web role matrix, which tags the Command
+      // Centre as Audit-only. The executive viewer family is stored under the
+      // `executive` department, so the department filter hid this destination
+      // from a Director/Chairman/MD/CEO entirely - routed and authorised, but
+      // unreachable. The screen is READ-ONLY on mobile, and department
+      // oversight is exactly what an MD/CEO needs it for, so mobile grants it.
+      //
+      // The web menu still differs until navigation.jsx is changed to match.
+      // This test exists to make that divergence deliberate and greppable
+      // rather than accidental.
+      for (final role in <String>[
+        AppRoles.director,
+        AppRoles.chairman,
+        AppRoles.mdCeo,
+      ]) {
+        expect(
+          canViewAutomation(role),
+          isTrue,
+          reason: '$role must be able to reach the Command Centre',
+        );
+      }
+    });
+
     test('excludes everyone else', () {
       for (final role in <String>[
         AppRoles.staff,
@@ -184,7 +212,9 @@ void main() {
         AppRoles.areaManager,
         AppRoles.financialController,
         AppRoles.headOfLegal,
-        AppRoles.director,
+        AppRoles.hrOfficer,
+        AppRoles.loanOfficer,
+        AppRoles.customerService,
       ]) {
         expect(
           canViewAutomation(role),
@@ -240,6 +270,164 @@ void main() {
         expect((d.subtitle ?? '').trim(), isNotEmpty, reason: d.id);
         expect(d.route.trim(), isNotEmpty, reason: d.id);
       }
+    });
+  });
+
+  // Regression guard for the "BOTTOM OVERFLOWED BY 139 PIXELS" report on the
+  // top-right menu sheet. The sheet lists every destination the signed-in role
+  // may open; with six rows (Profile, Notifications, Training, I-Meet,
+  // Automation Command Centre, Branch Performance) plus the Communication Admin
+  // row for some roles, the content exceeded the default modal bottom-sheet
+  // height cap and the last rows were clipped off-screen.
+  //
+  // The test opens the real [showAppMenuSheet] modal with the real executive
+  // menu. Driving [showAppMenu] instead would be self-defeating: it derives its
+  // rows from the live role, and an unauthenticated test session sees only a
+  // handful of destinations - never enough to overflow - so such a test passes
+  // even against the broken layout. And rendering the sheet in a plain Scaffold
+  // would hand it the full 852px, hiding the 9/16 modal cap that caused the
+  // bug. Going through the real modal with the six-row menu reproduces the
+  // failure exactly.
+  group('5. The app menu sheet fits on a handset without overflowing', () {
+    // The sheet reads AppColors from the ambient theme only, so no Supabase
+    // session is needed to lay it out.
+    setUpAll(() async {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      await Supabase.initialize(
+        url: 'https://placeholder.supabase.co',
+        publishableKey: 'sb_publishable_placeholder_widget_test_only',
+      );
+    });
+
+    // The real menu an executive sees: every destination plus Communication
+    // Admin. This is what overflowed the 9/16 cap on a real device.
+    final executiveMenu = <AppMenuAction>[
+      for (final d in appDestinations())
+        AppMenuAction(
+          label: d.label,
+          subtitle: d.subtitle ?? '',
+          icon: d.icon,
+          route: d.route,
+        ),
+      const AppMenuAction(
+        label: 'Communication Admin',
+        subtitle: 'Channels, groups and announcement audiences',
+        icon: Icons.campaign_outlined,
+        route: '/comm-admin',
+      ),
+    ];
+
+    // iPhone 15 Pro logical size - a modern handset, and a tight case for a
+    // six-row sheet with subtitles.
+    const handset = Size(393, 852);
+
+    // The default modal cap. Content taller than this is the bug.
+    const double defaultCap = 852 * 9 / 16;
+
+    Future<void> openMenu(WidgetTester tester) async {
+      tester.view.physicalSize = handset;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: Center(
+                child: ElevatedButton(
+                  onPressed: () =>
+                      showAppMenuSheet(context, actions: executiveMenu),
+                  child: const Text('open'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('the executive menu is the case that overflowed', (tester) async {
+      // Guards the guard: if destinations are ever removed, the remaining rows
+      // may no longer be tall enough to overflow, and the tests below would
+      // pass vacuously again. Assert the fixture is still the hard case.
+      expect(
+        executiveMenu.length,
+        greaterThanOrEqualTo(6),
+        reason: 'fixture must keep the six rows that caused the overflow',
+      );
+    });
+
+    testWidgets('opens the sheet without a RenderFlex overflow', (tester) async {
+      await openMenu(tester);
+
+      // A RenderFlex taller than its constraints raises a FlutterError, which
+      // this captures. This is the assertion that fails if the sheet ever
+      // reverts to a plain unscrollable Column under the 9/16 cap.
+      expect(tester.takeException(), isNull);
+
+      // Every row is present in the tree, whether or not it needs scrolling
+      // into view. Before the fix the rows existed but were painted off the
+      // bottom of the sheet.
+      for (final action in executiveMenu) {
+        expect(
+          find.text(action.label),
+          findsWidgets,
+          reason: 'menu must contain the "${action.label}" row',
+        );
+      }
+    });
+
+    testWidgets('the sheet content is scrollable, so a long list stays usable', (
+      tester,
+    ) async {
+      await openMenu(tester);
+
+      // Scrollability is the second line of defence: even if a role gains more
+      // destinations later, the sheet must grow and scroll rather than clip.
+      expect(
+        find.byType(SingleChildScrollView),
+        findsWidgets,
+        reason: 'menu content must be scrollable',
+      );
+    });
+
+    testWidgets('the sheet does not cover the whole screen', (tester) async {
+      await openMenu(tester);
+
+      // Regression guard for the opposite failure: an unconstrained sheet that
+      // grows to the full screen height, hiding the dashboard and leaving no
+      // drag-handle area to dismiss it.
+      final sheet = tester.getRect(find.byType(SingleChildScrollView));
+      expect(
+        sheet.height,
+        lessThan(handset.height),
+        reason: 'sheet must stay below the full screen height '
+            '(default modal cap would be ${defaultCap.toStringAsFixed(0)}px)',
+      );
+    });
+
+    testWidgets('the last row can be scrolled fully into view', (tester) async {
+      await openMenu(tester);
+
+      // The bottom row is the one that was cut in half, so verify it can
+      // actually be reached rather than merely present in the tree.
+      final last = find.text(executiveMenu.last.label);
+      await tester.scrollUntilVisible(
+        last,
+        120,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(
+        tester.getRect(last).bottom,
+        lessThanOrEqualTo(handset.height),
+        reason: 'last row must be reachable within the screen',
+      );
     });
   });
 }

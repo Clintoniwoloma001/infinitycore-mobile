@@ -6,6 +6,18 @@ import '../models/models.dart';
 
 /// Formatting + numeric helpers shared across features.
 class Fmt {
+  /// "Mar 2026" - a calendar month with no day component.
+  ///
+  /// Used wherever a figure describes a whole month rather than a single date,
+  /// so the label always states which month the numbers belong to.
+  static String monthYear(DateTime d) => DateFormat('MMM yyyy').format(d);
+
+  /// "Mar" for the current month, "Feb" for any other - the short form used on
+  /// a month filter chip, where the year is already implied by context but a
+  /// year boundary would otherwise be ambiguous.
+  static String monthShort(DateTime d) =>
+      d.year == DateTime.now().year ? DateFormat('MMM').format(d) : DateFormat('MMM yy').format(d);
+
   static String dateShort(String? iso) {
     if (iso == null || iso.isEmpty) return '—';
     final dt = DateTime.tryParse(iso);

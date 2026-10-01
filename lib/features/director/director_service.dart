@@ -118,6 +118,91 @@ List<Map<String, dynamic>> asList(Object? v) {
   return v.whereType<Map<String, dynamic>>().toList(growable: false);
 }
 
+/// Org-wide attendance totals for one reporting window.
+///
+/// The server's `summary.absent` is NOT an absence count. It is
+/// `SUM(expected_days) - SUM(attendance_present)` across the whole roster, and
+/// `expected_days` is a fixed 20 per employee that does NOT scale with the
+/// requested window. On the 211-person production roster that surfaced as
+/// "Absent 4220" (= 211 x 20) for a single day.
+///
+/// 4220 is therefore an attendance-DAY count, and showing it next to a label
+/// like "Absent" invited the reading "4220 people are absent", which is
+/// nonsense for a 211-person roster. Two defensible fixes exist: label it as
+/// days ("4220 expected days across 211 staff"), or count PEOPLE. This class
+/// implements the second, because "how many of my staff are absent today?" is
+/// the question an executive is actually asking, and a headcount is
+/// unambiguous - it can never exceed the size of the roster.
+///
+/// Both bases are computed so a caller can show whichever the screen needs.
+/// `presentDays`/`absentDays` remain available for a day-weighted view.
+class AttendanceTotals {
+  const AttendanceTotals({
+    required this.totalStaff,
+    required this.presentStaff,
+    required this.absentStaff,
+    required this.expectedDays,
+    required this.presentDays,
+    required this.absentDays,
+    required this.rate,
+  });
+
+  /// Everyone in the roster for this window, present or not. The denominator
+  /// for every headcount below, so no figure can exceed it.
+  final int totalStaff;
+
+  /// STAFF (not days) with at least one present day in the window.
+  final int presentStaff;
+
+  /// STAFF who never registered attendance across the window.
+  final int absentStaff;
+
+  /// Attendance slots the roster was expected to fill in the window.
+  final int expectedDays;
+
+  /// Slots actually filled.
+  final int presentDays;
+
+  /// Slots left unfilled. Never negative, even if the server over-reports.
+  final int absentDays;
+
+  /// [presentDays] / [expectedDays] as a percentage. Zero when nothing was
+  /// expected, so "no data" cannot render as a divide-by-zero.
+  final double rate;
+
+  static AttendanceTotals fromStaff(List<Map<String, dynamic>> staff) {
+    var expected = 0;
+    var present = 0;
+    var presentStaff = 0;
+    for (final p in staff) {
+      expected += _asInt(p['expected_days']);
+      final pDays = _asInt(p['attendance_present']);
+      present += pDays;
+      // A person counts as present if they worked at least one day in the
+      // window. `> 0` rather than `== expected`, so a partly-attending person
+      // is not counted as absent.
+      if (pDays > 0) presentStaff++;
+    }
+    final total = staff.length;
+    final absentStaff = (total - presentStaff).clamp(0, total);
+    final absent = expected - present;
+    return AttendanceTotals(
+      totalStaff: total,
+      presentStaff: presentStaff,
+      absentStaff: absentStaff,
+      expectedDays: expected,
+      presentDays: present,
+      absentDays: absent < 0 ? 0 : absent,
+      rate: expected == 0 ? 0 : (present / expected) * 100,
+    );
+  }
+
+  static int _asInt(Object? v) {
+    if (v is num) return v.toInt();
+    return int.tryParse('${v ?? ''}'.trim()) ?? 0;
+  }
+}
+
 class DirectorService {
   const DirectorService._();
 
