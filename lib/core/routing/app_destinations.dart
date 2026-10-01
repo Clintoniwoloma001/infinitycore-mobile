@@ -140,6 +140,21 @@ List<AppDestination> appDestinations() => const [
     icon: Icons.account_balance_outlined,
     route: '/branch-performance',
   ),
+
+  // Staff Analytics.
+  //
+  // OWNERSHIP: standalone, like Attendance Management, and driven by the ROLE
+  // rather than a department tag — HR OFFICER, HEAD OF HR and SUPER ADMIN need
+  // it, but so does any other role `canManageAttendance` allows, and those
+  // roles carry different department tags. Gating on a department would strand
+  // the exact audience the screen was built for.
+  AppDestination(
+    id: 'staff-analytics',
+    label: 'Staff Analytics',
+    subtitle: 'Scorecards, comparison and top performers',
+    icon: Icons.insights_outlined,
+    route: staffAnalyticsRoute,
+  ),
 ];
 
 /// True when [role] may open the Automation Command Centre.
@@ -190,6 +205,9 @@ List<AppDestination> visibleDestinations() {
         (d) => switch (d.id) {
           'automation' => canViewAutomation(role),
           'branch-performance' => canOpenExecutiveWorkspace(role),
+          // Role-gated rather than department-gated, because the audience is
+          // every role allowed to manage attendance.
+          'staff-analytics' => canManageAttendance(role),
           _ => true,
         },
       )

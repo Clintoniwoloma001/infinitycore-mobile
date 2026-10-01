@@ -409,6 +409,9 @@ class AttendanceManagementRow {
   final String employeeName;
   final String employeeNumber;
   final String department;
+  /// Job title. Carried through so the analytics leaderboards can rank staff by
+  /// role / position without a second lookup.
+  final String position;
   final String branchId;
   final String branchName;
   final String attendanceDate;
@@ -432,6 +435,7 @@ class AttendanceManagementRow {
     this.employeeName = '',
     this.employeeNumber = '',
     this.department = '',
+    this.position = '',
     this.branchId = '',
     this.branchName = '',
     this.attendanceDate = '',
@@ -458,6 +462,7 @@ class AttendanceManagementRow {
       employeeName: _s(m['employee_name']),
       employeeNumber: _s(m['employee_number']),
       department: _s(m['department']),
+      position: _s(m['position']),
       branchId: _s(m['branch_id']),
       branchName: _s(m['branch_name']),
       attendanceDate: _s(m['attendance_date']),

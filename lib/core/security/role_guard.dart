@@ -123,6 +123,10 @@ class AppRoles {
 /// unit-testable on its own.
 const String executiveRoute = '/director';
 
+/// The staff analytics workspace. Same audience as [canManageAttendance] — it
+/// reads the same server-authoritative summary RPC.
+const String staffAnalyticsRoute = '/staff-analytics';
+
 /// True when this role gets the executive workspace as its HOME experience.
 ///
 /// Super Admin is deliberately EXCLUDED. It keeps its own dashboard and may

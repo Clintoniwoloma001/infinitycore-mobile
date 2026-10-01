@@ -13,6 +13,7 @@ import '../../features/admin/bound_devices_screen.dart';
 import '../../features/auth/splash_screen.dart';
 import '../../features/attendance/attendance_management_screen.dart';
 import '../../features/attendance/public_terminal_screen.dart';
+import '../../features/attendance/staff_analytics_screen.dart';
 import '../../features/automation/automation_screen.dart';
 import '../../features/dashboard/home_shell.dart';
 import '../../features/director/director_shell.dart';
@@ -63,6 +64,14 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/attendance-management',
       builder: (_, _) => const AttendanceManagementScreen(),
+    ),
+    // Staff analytics: per-employee scorecards, 2-3 way comparison and the
+    // top-performer leaderboards for the HR/management roles.
+    // The literal path is kept here so the routing-wiring test can prove every
+    // registered destination has a GoRoute; it must equal staffAnalyticsRoute.
+    GoRoute(
+      path: '/staff-analytics',
+      builder: (_, _) => const StaffAnalyticsScreen(),
     ),
     GoRoute(
       path: '/profile',

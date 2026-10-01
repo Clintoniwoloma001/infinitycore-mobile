@@ -124,7 +124,9 @@ String? redirectDecision(AuthGateState auth, String loc, Uri uri) {
   }
 
   // Attendance management is role-gated (the server also enforces this).
-  if (loc == '/attendance-management' && !auth.canManageAttendanceRole) {
+  // Staff analytics reads the same RPC, so it shares the same audience.
+  if ((loc == '/attendance-management' || loc == staffAnalyticsRoute) &&
+      !auth.canManageAttendanceRole) {
     return '/home';
   }
 

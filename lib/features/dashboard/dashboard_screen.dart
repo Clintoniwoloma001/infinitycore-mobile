@@ -10,6 +10,45 @@ import '../../shared/widgets/attendance_history_card.dart';
 import '../../shared/widgets/common.dart';
 import 'dashboard_service.dart';
 
+/// Calendar-month selection shared by the staff dashboard's metric cards and
+/// its month chips.
+///
+/// Public and free of Flutter imports so the month maths can be unit-tested
+/// directly instead of only through a widget test.
+///
+/// The bug this exists to prevent: `_effectiveMonth` used to be written as
+/// `DateTime(now.year, month?.year ?? now.year, month?.month ?? now.month)`,
+/// passing the *year* into `DateTime`'s **month** slot. Dart normalises the
+/// overflow instead of throwing, so selecting September 2026 produced
+/// 2194-10-09. `DashboardMetrics.fromRecords` then matched no records at all
+/// and every card read 0 - which looked like "the data is missing" rather than
+/// "the filter is broken". Year and month must therefore always come from the
+/// same source.
+class DashboardMonthFilter {
+  const DashboardMonthFilter._();
+
+  /// The month being reported on; [selected] null means the current month.
+  ///
+  /// Only the year and month are meaningful; the day is normalised to the 1st.
+  static DateTime resolve(DateTime now, DateTime? selected) => DateTime(
+    selected?.year ?? now.year,
+    selected?.month ?? now.month,
+  );
+
+  /// The current month plus the previous [depth] months, newest first.
+  ///
+  /// Matches the rolling attendance window, so offering older months would show
+  /// an empty card for no reason. Negative month offsets roll over the year
+  /// boundary natively (`DateTime(2026, 0)` is December 2025).
+  static List<DateTime> options(DateTime now, {int depth = 5}) => [
+    for (var i = 0; i < depth; i++) DateTime(now.year, now.month - i, 1),
+  ];
+
+  /// True when [month] is the month [now] falls in.
+  static bool isCurrentMonth(DateTime now, DateTime month) =>
+      now.year == month.year && now.month == month.month;
+}
+
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key, this.onGoToTab, this.onGoToManagement});
 
@@ -35,21 +74,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// The four metric cards and the history below them describe exactly this
   /// month, so the label on the filter is what tells the reader whether "Days
   /// present" means this month or the one they just selected.
-  DateTime get _effectiveMonth {
-    final now = DateTime.now();
-    return DateTime(now.year, _month?.year ?? now.year, _month?.month ?? now.month);
-  }
-
-  /// Months offered by the filter: the current month plus the previous [depth]
-  /// months. Attendance history is fetched as a rolling window, so offering
-  /// months beyond that would show an empty card for no reason.
-  List<DateTime> _monthOptions({int depth = 5}) {
-    final now = DateTime.now();
-    return [
-      for (var i = 0; i < depth; i++)
-        DateTime(now.year, now.month - i, 1),
-    ];
-  }
+  /// The month the four cards are currently reporting on.
+  ///
+  /// Delegates to [DashboardMonthFilter.resolve] so the selector and the
+  /// metrics can never disagree about which month is selected.
+  DateTime get _effectiveMonth =>
+      DashboardMonthFilter.resolve(DateTime.now(), _month);
 
   @override
   void initState() {
@@ -125,7 +155,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             // above them so the reader never sees a figure without knowing
             // which month it belongs to.
             _MonthFilter(
-              months: _monthOptions(),
+              months: DashboardMonthFilter.options(DateTime.now()),
               selected: _effectiveMonth,
               onChanged: (m) => setState(() => _month = m),
             ),
@@ -499,7 +529,8 @@ class _MonthFilter extends StatelessWidget {
         itemBuilder: (context, i) {
           final m = months[i];
           final isSelected = m.year == selected.year && m.month == selected.month;
-          final isCurrent = m.year == DateTime.now().year && m.month == DateTime.now().month;
+          final isCurrent =
+              DashboardMonthFilter.isCurrentMonth(DateTime.now(), m);
           final label = isCurrent
               ? 'This month'
               : Fmt.monthYear(m);

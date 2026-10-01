@@ -8,6 +8,7 @@
 //   3. Super Admin sees everything
 //   4. the Automation Command Centre is scoped to its permitted roles
 //   5. Branch Performance is scoped to the executive workspace
+//   6. Staff Analytics is scoped to the attendance-managing roles
 //
 // They run against the REAL destination registry, so a destination added later
 // without a decision about who sees it fails here rather than leaking to
@@ -33,6 +34,10 @@ List<String> visibleFor(String? role, {String? storedDepartment}) =>
             'automation' => canViewAutomation(role),
             'branch-performance' =>
               role != null && canOpenExecutiveWorkspace(role),
+            // Staff Analytics is gated by the SAME capability the real
+            // [visibleDestinations] uses. Without this arm a default `_ => true`
+            // would hand the screen to every role, including plain staff.
+            'staff-analytics' => role != null && canManageAttendance(role),
             _ => true,
           },
         )
@@ -87,6 +92,58 @@ void main() {
         // that is where it sits in the registry.
         <String>['profile', 'notifications', 'training', 'imeet'],
       );
+    });
+
+    // Staff Analytics exposes OTHER people's attendance, so it must never fall
+    // through to a default `_ => true`.
+    group('Staff Analytics is scoped to attendance-managing roles', () {
+      for (final role in const [
+        AppRoles.hrOfficer,
+        AppRoles.headOfHumanResources,
+        AppRoles.superAdmin,
+        AppRoles.admin,
+        AppRoles.branchManager,
+      ]) {
+        test('$role may open it', () {
+          expect(visibleFor(role), contains('staff-analytics'));
+        });
+      }
+
+      for (final role in const [
+        AppRoles.staff,
+        AppRoles.customer,
+        AppRoles.loanOfficer,
+        AppRoles.customerService,
+        AppRoles.headOfBusiness,
+      ]) {
+        test('$role may NOT open it', () {
+          expect(visibleFor(role), isNot(contains('staff-analytics')));
+        });
+      }
+
+      test('an unauthenticated visitor gets nothing', () {
+        expect(visibleFor(null), isNot(contains('staff-analytics')));
+      });
+
+      test('the gate matches the server RPC audience exactly', () {
+        // The RPC `mobile_attendance_summary` is the real boundary. The menu
+        // must not show the screen to anyone that RPC would refuse.
+        for (final role in const [
+          AppRoles.hrOfficer,
+          AppRoles.headOfHumanResources,
+          AppRoles.superAdmin,
+          AppRoles.admin,
+          AppRoles.branchManager,
+          AppRoles.staff,
+          AppRoles.director,
+        ]) {
+          expect(
+            visibleFor(role).contains('staff-analytics'),
+            canManageAttendance(role),
+            reason: 'menu visibility disagreed with the RPC gate for $role',
+          );
+        }
+      });
     });
 
     test('every role gets at least the shared set', () {
@@ -246,11 +303,25 @@ void main() {
         // (owner or a frozen participant), which is a stricter check than any
         // role tag could express here.
         'imeet',
+        // Staff Analytics is NOT universal and must never be added to this set:
+        // it exposes OTHER people's attendance to HR and management. It is left
+        // untagged because its audience is a ROLE set (canManageAttendance), not
+        // a single department - it is gated by capability in
+        // [visibleDestinations] instead, which is the deliberate choice the
+        // loop below is asking for.
       };
+
+      // Destinations whose audience is a capability rather than a department.
+      // They are untagged on purpose, so this list is the record of that choice.
+      const capabilityGated = <String>{
+        'automation',
+        'staff-analytics',
+      };
+
       for (final d in appDestinations()) {
         if (d.department != null) continue;
         expect(
-          expectedShared.contains(d.id),
+          expectedShared.contains(d.id) || capabilityGated.contains(d.id),
           isTrue,
           reason:
               '${d.id} is shared but is not a known-universal destination; '
