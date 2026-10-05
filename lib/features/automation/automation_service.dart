@@ -113,6 +113,49 @@ class AutomationItem {
   }
 }
 
+/// One automation-sourced task assigned to a person.
+///
+/// This is what an executive raises against the automation specialist. It comes
+/// from `work_tasks` filtered to `source = 'automation_centre'`, so it is
+/// deliberately separate from the ACC's own portfolio percentages.
+class AutomationTask {
+  const AutomationTask(this.raw);
+
+  final Map<String, dynamic> raw;
+
+  String get id => raw['id']?.toString() ?? '';
+  String get title => raw['title']?.toString() ?? '';
+  String get description => raw['description']?.toString() ?? '';
+  String get department => raw['department']?.toString() ?? '';
+  String get status => raw['status']?.toString() ?? 'open';
+  String get assigneeUserId => raw['assigned_to_user_id']?.toString() ?? '';
+  String get automationItemId => raw['automation_item_id']?.toString() ?? '';
+
+  DateTime? get dueDate {
+    final v = raw['due_date']?.toString();
+    if (v == null || v.isEmpty) return null;
+    return DateTime.tryParse(v);
+  }
+
+  /// Null rather than 0 when the server sent nothing, so "not reported" never
+  /// renders as "no progress".
+  double? get progressPct => _doubleOrNull(raw['progress_pct']);
+
+  bool get isOverdue {
+    final due = dueDate;
+    if (due == null) return false;
+    final terminal = const {'completed', 'cancelled', 'closed'};
+    if (terminal.contains(status.toLowerCase())) return false;
+    return due.isBefore(DateTime.now());
+  }
+
+  bool get isOpen => !const {
+    'completed',
+    'cancelled',
+    'closed',
+  }.contains(status.toLowerCase());
+}
+
 /// The full portfolio payload.
 class AutomationPortfolio {
   const AutomationPortfolio({
@@ -183,5 +226,96 @@ class AutomationService {
       totalItems: _int(totals['items']),
       totalLive: _int(totals['live']),
     );
+  }
+
+  // --------------------------------------------------------------------------
+  // MY WORK
+  // --------------------------------------------------------------------------
+
+  /// Whether the signed-in account may raise an automation task against someone.
+  ///
+  /// Read from the server's `can_assign_automation_task()` rather than a local
+  /// role list, so the menu can never offer an action the RPC would refuse.
+  /// A failed read is treated as "cannot", which fails closed.
+  Future<bool> canAssign() async {
+    try {
+      final res = await SupabaseService.client.rpc('can_assign_automation_task');
+      return res == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Automation tasks assigned to the signed-in person.
+  ///
+  /// Scoped on the server to `source = 'automation_centre'`, so this is the
+  /// automation specialist's own queue and never another team's work.
+  Future<List<AutomationTask>> myWork() async {
+    final res = await SupabaseService.client.rpc('get_my_automation_work');
+    if (res is Map<String, dynamic> && res['ok'] == false) {
+      throw AutomationException(
+        '${res['message'] ?? 'Unable to load your automation work'}',
+      );
+    }
+    if (res is! List) return const [];
+    return res
+        .whereType<Map>()
+        .map((e) => AutomationTask(Map<String, dynamic>.from(e)))
+        .toList(growable: false);
+  }
+
+  // --------------------------------------------------------------------------
+  // ASSIGNMENT
+  // --------------------------------------------------------------------------
+
+  /// Raise an automation task against a department or item.
+  ///
+  /// Goes through `assign_automation_work_task`, which is the ONLY path that can
+  /// create an automation-sourced task. The general `create_work_task_with_steps`
+  /// RPC is deliberately not used: widening it would hand these roles the
+  /// ability to create any task for any person.
+  ///
+  /// [assigneeUserId] defaults to the caller, which is how a specialist raises
+  /// their OWN work — the server allows that for every signed-in account.
+  Future<void> assignWorkTask({
+    required String department,
+    required String label,
+    String? description,
+    String? assigneeUserId,
+    DateTime? dueDate,
+    int slaReviewHours = 48,
+    String? automationItemId,
+  }) async {
+    if (department.trim().isEmpty) {
+      throw const AutomationException('Choose a department.');
+    }
+    if (label.trim().isEmpty) {
+      throw const AutomationException('Enter a task title.');
+    }
+
+    final res = await SupabaseService.client.rpc(
+      'assign_automation_work_task',
+      params: {
+        'p_department': department.trim(),
+        'p_label': label.trim(),
+        'p_description': (description ?? '').trim().isEmpty
+            ? null
+            : description!.trim(),
+        'p_assignee_user_id': assigneeUserId,
+        'p_due_date': dueDate == null
+            ? null
+            : '${dueDate.year.toString().padLeft(4, '0')}-'
+                  '${dueDate.month.toString().padLeft(2, '0')}-'
+                  '${dueDate.day.toString().padLeft(2, '0')}',
+        'p_sla_review_hours': slaReviewHours,
+        'p_automation_item_id': automationItemId,
+      },
+    );
+
+    if (res is Map<String, dynamic> && res['ok'] == false) {
+      throw AutomationException(
+        '${res['message'] ?? 'The server refused this assignment'}',
+      );
+    }
   }
 }
