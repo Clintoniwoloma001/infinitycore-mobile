@@ -155,6 +155,23 @@ List<AppDestination> appDestinations() => const [
     icon: Icons.insights_outlined,
     route: staffAnalyticsRoute,
   ),
+
+  // Employee Tracking.
+  //
+  // OWNERSHIP: SUPER ADMIN ONLY on mobile. This is deliberately narrower than
+  // the web, where `trackingGate` consults employee_tracking_access() and so
+  // also admits a delegated tracking grantee. On a phone we do not delegate
+  // precise staff location at all: the device is easier to lose or lend than a
+  // managed desktop, so the gate is a single role rather than the RPC's answer.
+  // Gated by capability in [visibleDestinations], consistent with ACC and Staff
+  // Analytics above.
+  AppDestination(
+    id: 'employee-tracking',
+    label: 'Employee Tracking',
+    subtitle: 'Live staff positions',
+    icon: Icons.location_on_outlined,
+    route: employeeTrackingRoute,
+  ),
 ];
 
 /// True when [role] may open the Automation Command Centre.
@@ -208,6 +225,9 @@ List<AppDestination> visibleDestinations() {
           // Role-gated rather than department-gated, because the audience is
           // every role allowed to manage attendance.
           'staff-analytics' => canManageAttendance(role),
+          // SUPER ADMIN ONLY. Precise staff location is not delegated on
+          // mobile, so this is a single role and not the RPC's answer.
+          'employee-tracking' => canAccessEmployeeTracking(role),
           _ => true,
         },
       )

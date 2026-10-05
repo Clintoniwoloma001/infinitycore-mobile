@@ -127,6 +127,11 @@ const String executiveRoute = '/director';
 /// reads the same server-authoritative summary RPC.
 const String staffAnalyticsRoute = '/staff-analytics';
 
+/// Employee Tracking. Super Admin only on mobile — see
+/// [canAccessEmployeeTracking]. Kept as a constant so the router, the menu and
+/// the auth gate cannot drift apart on the path string.
+const String employeeTrackingRoute = '/employee-tracking';
+
 /// True when this role gets the executive workspace as its HOME experience.
 ///
 /// Super Admin is deliberately EXCLUDED. It keeps its own dashboard and may
@@ -483,6 +488,24 @@ bool canManageAttendance(String role) => const [
   AppRoles.hrOfficer,
   AppRoles.branchManager,
 ].contains(role);
+
+/// Employee Tracking — SUPER ADMIN ONLY on mobile.
+///
+/// This is deliberately STRICTER than the web, where `trackingGate` consults the
+/// server's `employee_tracking_access()` and therefore also admits a time-boxed
+/// grantee. Mobile opts out of that delegation deliberately: precise staff
+/// location is the most sensitive data the bank holds, and a phone is a device
+/// that is far easier to lose, lend or share than a managed desktop.
+///
+/// The consequence is intentional and worth stating: a tracking grant issued on
+/// web does NOT open this screen on mobile. Only Super Admin does. If a delegated
+/// viewer needs mobile access, that is a decision to make explicitly, not a side
+/// effect of the two platforms disagreeing.
+///
+/// This is a NAVIGATION gate. The real boundary is still the server: every
+/// tracking RPC checks `employee_tracking_access()` and refuses regardless of what
+/// the client believes.
+bool canAccessEmployeeTracking(String role) => role == AppRoles.superAdmin;
 
 /// Communication Administration access.
 ///

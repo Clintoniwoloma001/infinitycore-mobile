@@ -130,7 +130,17 @@ String? redirectDecision(AuthGateState auth, String loc, Uri uri) {
     return '/home';
   }
 
-  // Bound-device management is restricted to Super Admin / Head of HR.
+  // Employee Tracking is SUPER ADMIN ONLY on mobile, which is STRICTER than the
+// web: a tracking GRANT issued on web deliberately does not open it here.
+// Redirecting rather than rendering a refusal screen, so the destination is
+// never mounted at all for anyone else. The server refuses the RPC regardless,
+// which is the real boundary.
+if (loc == employeeTrackingRoute &&
+    !canAccessEmployeeTracking(auth.role)) {
+  return '/home';
+}
+
+// Bound-device management is restricted to Super Admin / Head of HR.
   if (loc == '/bound-devices' &&
       auth.role != AppRoles.superAdmin &&
       auth.role != AppRoles.headOfHumanResources) {

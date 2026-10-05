@@ -38,6 +38,10 @@ List<String> visibleFor(String? role, {String? storedDepartment}) =>
             // [visibleDestinations] uses. Without this arm a default `_ => true`
             // would hand the screen to every role, including plain staff.
             'staff-analytics' => role != null && canManageAttendance(role),
+            // Employee Tracking is SUPER ADMIN ONLY. Same reason: a default
+            // `_ => true` would expose every other employee's live location.
+            'employee-tracking' =>
+              role != null && canAccessEmployeeTracking(role),
             _ => true,
           },
         )
@@ -141,6 +145,66 @@ void main() {
             visibleFor(role).contains('staff-analytics'),
             canManageAttendance(role),
             reason: 'menu visibility disagreed with the RPC gate for $role',
+          );
+        }
+      });
+    });
+
+    // Employee Tracking exposes OTHER people's live location, so it must never
+    // fall through to a default `_ => true`.
+    group('Employee Tracking is Super Admin only', () {
+      test('super_admin may open it', () {
+        expect(
+          visibleFor(AppRoles.superAdmin),
+          contains('employee-tracking'),
+        );
+      });
+
+      for (final role in const [
+        AppRoles.admin,
+        AppRoles.headOfHumanResources,
+        AppRoles.hrOfficer,
+        AppRoles.branchManager,
+        AppRoles.director,
+        AppRoles.chairman,
+        AppRoles.headOfBusiness,
+        AppRoles.staff,
+        AppRoles.customer,
+        AppRoles.loanOfficer,
+        AppRoles.customerService,
+      ]) {
+        test('$role may NOT open it', () {
+          expect(visibleFor(role), isNot(contains('employee-tracking')));
+        });
+      }
+
+      test('an unauthenticated visitor gets nothing', () {
+        expect(visibleFor(null), isNot(contains('employee-tracking')));
+      });
+
+      test('the gate is a single role, not the web grant model', () {
+        // The WEB admits a delegated tracking grantee via
+        // employee_tracking_access(). Mobile deliberately does NOT: a phone is
+        // easier to lose or lend than a managed desktop. This test is the
+        // record of that difference, so widening it later is a conscious act.
+        expect(canAccessEmployeeTracking(AppRoles.superAdmin), isTrue);
+        expect(canAccessEmployeeTracking(AppRoles.admin), isFalse);
+        expect(canAccessEmployeeTracking(AppRoles.director), isFalse);
+        expect(canAccessEmployeeTracking(''), isFalse);
+      });
+
+      test('the menu agrees with the capability the screen enforces', () {
+        for (final role in const [
+          AppRoles.superAdmin,
+          AppRoles.admin,
+          AppRoles.hrOfficer,
+          AppRoles.director,
+          AppRoles.staff,
+        ]) {
+          expect(
+            visibleFor(role).contains('employee-tracking'),
+            canAccessEmployeeTracking(role),
+            reason: 'menu visibility disagreed with the screen gate for $role',
           );
         }
       });
@@ -316,6 +380,7 @@ void main() {
       const capabilityGated = <String>{
         'automation',
         'staff-analytics',
+        'employee-tracking',
       };
 
       for (final d in appDestinations()) {

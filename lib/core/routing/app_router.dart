@@ -14,6 +14,7 @@ import '../../features/auth/splash_screen.dart';
 import '../../features/attendance/attendance_management_screen.dart';
 import '../../features/attendance/public_terminal_screen.dart';
 import '../../features/attendance/staff_analytics_screen.dart';
+import '../../features/attendance/employee_tracking_screen.dart';
 import '../../features/automation/automation_screen.dart';
 import '../../features/dashboard/home_shell.dart';
 import '../../features/director/director_shell.dart';
@@ -67,11 +68,17 @@ final GoRouter appRouter = GoRouter(
     ),
     // Staff analytics: per-employee scorecards, 2-3 way comparison and the
     // top-performer leaderboards for the HR/management roles.
-    // The literal path is kept here so the routing-wiring test can prove every
-    // registered destination has a GoRoute; it must equal staffAnalyticsRoute.
     GoRoute(
       path: '/staff-analytics',
       builder: (_, _) => const StaffAnalyticsScreen(),
+    ),
+    // Employee Tracking. SUPER ADMIN ONLY on mobile - see
+    // `canAccessEmployeeTracking` for why this is stricter than the web.
+    // The literal path is kept so the routing-wiring test can prove every
+    // registered destination has a GoRoute.
+    GoRoute(
+      path: '/employee-tracking',
+      builder: (_, _) => const EmployeeTrackingScreen(),
     ),
     GoRoute(
       path: '/profile',
