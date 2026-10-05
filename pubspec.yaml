@@ -25,7 +25,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # Sections 2, 4, 5 executive UI + Branch Performance 42702 fix + executive
 # role constraint + I-Meet audio signed-URL fix.
 # +13 continues from the active 1.1.2+12.
-version: 1.1.4+14
+version: 1.1.5+15
 
 environment:
   sdk: ^3.13.3
