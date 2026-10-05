@@ -18,12 +18,18 @@ class MetricTile extends StatelessWidget {
     this.delta,
     this.icon,
     this.caption,
+    this.onTap,
   });
 
   final String label;
   final String? value;
   final double? delta;
   final IconData? icon;
+
+  /// Opens the detail this figure summarises. Null for a tile with no
+  /// drill-down, in which case the tile is not tappable and must not LOOK
+  /// tappable - a dead tap that looks live is worse than an obvious summary.
+  final VoidCallback? onTap;
 
   /// Small non-numeric qualifier shown under the value, e.g. "staff · this
   /// month".
@@ -43,7 +49,7 @@ class MetricTile extends StatelessWidget {
     final down = (delta ?? 0) < 0;
     final flat = delta == null || delta == 0;
 
-    return Container(
+    final body = Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: AppColors.surface(context),
@@ -107,6 +113,18 @@ class MetricTile extends StatelessWidget {
               ),
             ),
         ],
+      ),
+    );
+
+    // Only wrap when there is somewhere to go, so a summary-only tile keeps its
+    // plain surface and never promises a detail it cannot show.
+    if (onTap == null) return body;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: body,
       ),
     );
   }

@@ -12,6 +12,7 @@ import 'department_detail_screen.dart';
 import 'leave_overview_screen.dart';
 import 'role_performance_screen.dart';
 import 'attendance_overview_screen.dart';
+import 'metric_drilldown_screen.dart';
 import '../../core/theme/app_theme.dart';
 
 class DirectorHomeScreen extends StatefulWidget {
@@ -111,11 +112,21 @@ class _DirectorHomeScreenState extends State<DirectorHomeScreen> {
                   label: 'Total staff',
                   value: fmtInt(s.summary['total_staff']),
                   icon: Icons.groups_outlined,
+                  onTap: () => _openDrilldown(
+                    context,
+                    MetricDrilldown.totalStaff,
+                    s,
+                  ),
                 ),
                 MetricTile(
                   label: 'On leave',
                   value: fmtInt(s.summary['on_leave']),
                   icon: Icons.beach_access_outlined,
+                  onTap: () => _openDrilldown(
+                    context,
+                    MetricDrilldown.onLeave,
+                    s,
+                  ),
                 ),
                 MetricTile(
                   label: 'Present',
@@ -124,27 +135,52 @@ class _DirectorHomeScreenState extends State<DirectorHomeScreen> {
                   // Names the basis and the window, so a headcount is never
                   // misread as a day count.
                   caption: 'staff · $periodLabel',
+                  onTap: () => _openDrilldown(
+                    context,
+                    MetricDrilldown.present,
+                    s,
+                  ),
                 ),
                 MetricTile(
                   label: 'Absent',
                   value: absentStaff,
                   icon: Icons.person_off_outlined,
                   caption: 'staff · $periodLabel',
+                  onTap: () => _openDrilldown(
+                    context,
+                    MetricDrilldown.absent,
+                    s,
+                  ),
                 ),
                 MetricTile(
                   label: 'Attendance',
                   value: fmtPct(s.summary['attendance_rate']),
                   icon: Icons.schedule_outlined,
+                  onTap: () => _openDrilldown(
+                    context,
+                    MetricDrilldown.attendance,
+                    s,
+                  ),
                 ),
                 MetricTile(
                   label: 'KPI completion',
                   value: fmtPct(s.summary['kpi_completion']),
                   icon: Icons.flag_outlined,
+                  onTap: () => _openDrilldown(
+                    context,
+                    MetricDrilldown.kpi,
+                    s,
+                  ),
                 ),
                 MetricTile(
                   label: 'Target completion',
                   value: fmtPct(s.summary['target_completion']),
                   icon: Icons.track_changes_outlined,
+                  onTap: () => _openDrilldown(
+                    context,
+                    MetricDrilldown.target,
+                    s,
+                  ),
                 ),
               ],
             ),
@@ -208,6 +244,27 @@ class _DirectorHomeScreenState extends State<DirectorHomeScreen> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// Opens the people behind one metric tile.
+  ///
+  /// The roster rows are passed straight through rather than re-fetched, so the
+  /// drill-down always shows the SAME period and numbers the executive tapped.
+  /// Re-querying here is how a dashboard ends up contradicting itself.
+  void _openDrilldown(
+    BuildContext context,
+    MetricDrilldown metric,
+    DirectorSnapshot snapshot,
+  ) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => MetricDrilldownScreen(
+          metric: metric,
+          staff: snapshot.staff,
+          periodLabel: _period.label.toLowerCase(),
         ),
       ),
     );
