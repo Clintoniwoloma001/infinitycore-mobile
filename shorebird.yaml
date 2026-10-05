@@ -8,7 +8,13 @@
 app_id: fe4a2097-e6ff-4d51-9705-bf74a3863788
 
 # auto_update controls if Shorebird should automatically update in the background on launch.
-# If auto_update: false, you will need to use package:shorebird_code_push to trigger updates.
 # https://pub.dev/packages/shorebird_code_push
-# Uncomment the following line to disable automatic updates.
-# auto_update: false
+#
+# Explicitly TRUE (the default, stated here on purpose): the app must pick up a
+# patch on the next launch with no prompt and no user action, which is what makes
+# an OTA release effective for staff who never open a store.
+auto_update: true
+
+# Android and iOS are both released through this project. Patches require the
+# SAME signing identity as the base release, otherwise the platform rejects the
+# update - see android/app/build.gradle.kts.

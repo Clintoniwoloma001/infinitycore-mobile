@@ -61,3 +61,18 @@ app.*.map.json
 # Widget Preview related
 .widget_preview/
 .env
+
+# ---------------------------------------------------------------------------
+# RELEASE SIGNING SECRETS — never commit these
+# ---------------------------------------------------------------------------
+# The passwords. `key.properties.example` is the committed template.
+android/key.properties
+
+# The keystore itself. A leaked upload key lets anyone sign an update that
+# Android will accept as yours, which is why it is excluded even though the
+# original file was provided in the project directory. Keep the real file out
+# of git and distribute it through a secure channel.
+android/upload-keystore.jks
+upload-keystore.jks
+*.jks
+*.keystore

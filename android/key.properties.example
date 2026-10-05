@@ -1,0 +1,17 @@
+# RELEASE SIGNING CREDENTIALS — copy to `key.properties` and fill in.
+#
+#   cp key.properties.example key.properties
+#
+# `key.properties` is gitignored. Do NOT commit the filled-in copy.
+#
+# storeFile is resolved relative to android/app, so `../upload-keystore.jks`
+# points at android/upload-keystore.jks.
+#
+# THIS MUST MATCH THE KEY THE CURRENT SHOREBIRD RELEASE WAS SIGNED WITH.
+# Android refuses an OTA patch whose signature differs from the installed app,
+# so a mismatched keystore silently breaks every future code push.
+
+storePassword=CHANGE_ME
+keyPassword=CHANGE_ME
+keyAlias=key
+storeFile=../upload-keystore.jks
