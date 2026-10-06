@@ -54,6 +54,25 @@ class _BranchDeepDiveScreenState extends State<BranchDeepDiveScreen> {
       _loading = true;
       _error = null;
     });
+
+    // Defence in depth: `p_branch_id` is a uuid, and Postgres would answer a
+    // branch NAME with `invalid input syntax for type uuid: "Head Office"` —
+    // a raw engine error the user should never read. The Branch Performance
+    // screen resolves names to UUIDs before navigating here; if any other
+    // caller ever passes a non-UUID, explain honestly instead of making a
+    // request that can only fail.
+    if (!isUuid(widget.branchId)) {
+      if (!mounted) return;
+      setState(() {
+        _error =
+            'This entry is not linked to a branch record, so there is '
+            'nothing to rank. Go back, refresh the branch list, and open '
+            'a branch that has a real record.';
+        _loading = false;
+      });
+      return;
+    }
+
     try {
       final d = await MprService.instance.branchAttribution(
         branchId: widget.branchId,

@@ -143,4 +143,117 @@ void main() {
       },
     );
   });
+
+  // ---------------------------------------------------------------------------
+  // REGRESSION: the Deep-Dive RPC takes p_branch_id uuid, but the snapshot's
+  // performance `branches` rows carry id = branch NAME (they are grouped by
+  // name). Passing that straight through produced
+  // `invalid input syntax for type uuid: "Head Office"` on screen.
+  // ---------------------------------------------------------------------------
+  group('Deep-dive branch id resolution', () {
+    const headOfficeUuid = '0b6f2a1e-9c3d-4f21-8a77-2f5f1c9d4e10';
+    const ikoroduUuid = '8d1c6b2f-1a2b-4c3d-9e8f-0a1b2c3d4e5f';
+
+    /// Shaped like the `filters.branches` array the same snapshot returns:
+    /// `[{id: <uuid>, name: <branch_name>}]`.
+    final filters = <String, dynamic>{
+      'branches': [
+        {'id': headOfficeUuid, 'name': 'Head Office'},
+        {'id': ikoroduUuid, 'name': 'Ikorodu'},
+      ],
+    };
+
+    test('a name-valued row id resolves to the branch uuid', () {
+      // The exact screenshot failure: row id is "Head Office", the RPC wants
+      // the UUID behind that name.
+      expect(
+        resolveBranchUuid(
+          branchId: 'Head Office',
+          branchName: 'Head Office',
+          filters: filters,
+        ),
+        headOfficeUuid,
+      );
+    });
+
+    test('an id that is already a uuid passes through untouched', () {
+      expect(
+        resolveBranchUuid(
+          branchId: headOfficeUuid,
+          branchName: 'Head Office',
+          filters: const <String, dynamic>{},
+        ),
+        headOfficeUuid,
+      );
+    });
+
+    test('resolution keys off the row name, not the id', () {
+      expect(
+        resolveBranchUuid(
+          branchId: 'odd-server-key',
+          branchName: 'Ikorodu',
+          filters: filters,
+        ),
+        ikoroduUuid,
+      );
+    });
+
+    test('the Unassigned aggregate resolves to null, never a fake id', () {
+      // "Unassigned" is an aggregate of staff with no branch — there is no
+      // branch record, and inventing an id would query the wrong people.
+      expect(
+        resolveBranchUuid(
+          branchId: 'Unassigned',
+          branchName: 'Unassigned',
+          filters: filters,
+        ),
+        isNull,
+      );
+    });
+
+    test('missing or malformed filters resolve to null instead of throwing', () {
+      expect(
+        resolveBranchUuid(
+          branchId: 'Head Office',
+          branchName: 'Head Office',
+          filters: const <String, dynamic>{},
+        ),
+        isNull,
+      );
+      expect(
+        resolveBranchUuid(
+          branchId: 'Head Office',
+          branchName: 'Head Office',
+          filters: const <String, dynamic>{'branches': 'not-a-list'},
+        ),
+        isNull,
+      );
+    });
+
+    test('a filter entry whose id is not a uuid is never returned', () {
+      expect(
+        resolveBranchUuid(
+          branchId: 'Broken',
+          branchName: 'Broken',
+          filters: const <String, dynamic>{
+            'branches': [
+              {'id': 'Broken', 'name': 'Broken'},
+            ],
+          },
+        ),
+        isNull,
+      );
+    });
+
+    test('a blank branch name resolves to null', () {
+      expect(
+        resolveBranchUuid(
+          branchId: '',
+          branchName: '   ',
+          filters: filters,
+        ),
+        isNull,
+      );
+    });
+  });
 }

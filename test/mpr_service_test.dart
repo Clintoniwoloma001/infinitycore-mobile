@@ -269,4 +269,32 @@ void main() {
       expect(r.boostNote, isNull);
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // REGRESSION: p_branch_id is a uuid. A branch NAME used to reach Postgres as
+  // `invalid input syntax for type uuid: "Head Office"` and surface on screen
+  // as "Unable to load branch attribution". Validation must happen first.
+  // ---------------------------------------------------------------------------
+  group('uuid validation guards the RPC contract', () {
+    test('accepts a canonical uuid, in either case', () {
+      expect(isUuid('0b6f2a1e-9c3d-4f21-8a77-2f5f1c9d4e10'), isTrue);
+      expect(isUuid('0B6F2A1E-9C3D-4F21-8A77-2F5F1C9D4E10'), isTrue);
+    });
+
+    test('rejects a branch name — the exact failure the app used to hit', () {
+      expect(isUuid('Head Office'), isFalse);
+      expect(isUuid(''), isFalse);
+      expect(isUuid('Unassigned'), isFalse);
+    });
+
+    test('rejects malformed uuids before Postgres can', () {
+      expect(isUuid('0b6f2a1e-9c3d-4f21-8a77'), isFalse);
+      expect(isUuid('not-a-uuid-but-hyphenated'), isFalse);
+      expect(isUuid('12345678123412341234123412341234'), isFalse);
+    });
+
+    test('surrounding whitespace does not fail an otherwise valid uuid', () {
+      expect(isUuid(' 0b6f2a1e-9c3d-4f21-8a77-2f5f1c9d4e10 '), isTrue);
+    });
+  });
 }

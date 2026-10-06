@@ -377,6 +377,19 @@ class MprService {
   }
 }
 
+/// True when [value] is a UUID — the shape `p_branch_id uuid` requires.
+///
+/// Postgres rejects anything else with `invalid input syntax for type uuid`,
+/// a raw engine error that quotes the bad value (for example a branch NAME
+/// where a branch UUID was expected) and reads like a crash to the user.
+/// Callers validate first so that error can never reach a screen.
+final RegExp _uuidPattern = RegExp(
+  r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}'
+  r'-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+);
+
+bool isUuid(String value) => _uuidPattern.hasMatch(value.trim());
+
 class MprException implements Exception {
   const MprException(this.message);
   final String message;

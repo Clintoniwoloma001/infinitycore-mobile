@@ -55,6 +55,50 @@ class BranchPerformance {
   }
 }
 
+/// Resolves the branch UUID that `rpc_get_branch_drag_and_soaring_staff`
+/// requires, from data the SAME snapshot already returned.
+///
+/// WHY THIS EXISTS — `get_director_executive_snapshot` builds the performance
+/// `branches` array with `id = coalesce(branch_name, 'Unassigned')`, because
+/// those rows are GROUPED BY BRANCH NAME. So [BranchPerformance.id] is a NAME
+/// ("Head Office"), and sending it straight to `p_branch_id uuid` fails with
+/// `invalid input syntax for type uuid: "Head Office"` — a raw Postgres error
+/// shown to the user as "Unable to load branch attribution".
+///
+/// The same payload carries `filters.branches` — a list of `id` (the branch
+/// UUID) and `name` (the branch name) pairs — the server's own name→UUID map,
+/// so the screen
+/// resolves through it rather than inventing an id or changing the shared
+/// snapshot contract the web dashboard also reads.
+///
+/// Returns null when the row cannot be tied to a real branch — e.g.
+/// 'Unassigned', an aggregate of staff with no branch — so the caller can
+/// explain instead of firing a request that can only fail.
+@visibleForTesting
+String? resolveBranchUuid({
+  required String branchId,
+  required String branchName,
+  required Map<String, dynamic> filters,
+}) {
+  // Future-proof: if the server ever sends a real UUID here, pass it through.
+  if (isUuid(branchId)) return branchId;
+
+  final rows = filters['branches'];
+  if (rows is! List) return null;
+
+  final wanted = branchName.trim();
+  if (wanted.isEmpty) return null;
+
+  for (final row in rows) {
+    if (row is! Map) continue;
+    final name = (row['name'] ?? '').toString().trim();
+    if (name != wanted) continue;
+    final id = (row['id'] ?? '').toString();
+    if (isUuid(id)) return id;
+  }
+  return null;
+}
+
 class BranchPerformanceScreen extends StatefulWidget {
   const BranchPerformanceScreen({super.key});
 
@@ -153,10 +197,37 @@ class _BranchPerformanceScreenState extends State<BranchPerformanceScreen> {
       );
       return;
     }
+
+    // The row's `id` is the branch NAME (the snapshot groups these rows by
+    // name), while the RPC takes a UUID. Resolve through the snapshot's own
+    // `filters.branches` map; if the row cannot be tied to a real branch,
+    // say so rather than sending a request Postgres must reject with
+    // `invalid input syntax for type uuid`.
+    final uuid = resolveBranchUuid(
+      branchId: branch.id,
+      branchName: branch.name,
+      filters: _snapshot?.filters ?? const <String, dynamic>{},
+    );
+    if (uuid == null) {
+      final unassigned = branch.name.trim() == 'Unassigned';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            unassigned
+                ? '"Unassigned" is an aggregate of staff with no branch '
+                      'assignment — there is no branch record to deep-dive.'
+                : 'Could not match "${branch.name}" to a branch record. '
+                      'Refresh and try again.',
+          ),
+        ),
+      );
+      return;
+    }
+
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => BranchDeepDiveScreen(
-          branchId: branch.id,
+          branchId: uuid,
           branchName: branch.name,
           periodLabel: label,
           windowLabel: _period.label,
