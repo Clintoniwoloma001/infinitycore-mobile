@@ -1,5 +1,13 @@
-# Uncomment this line to define a global platform for your project
-# platform :ios, '15.0'
+# The platform MUST be declared explicitly.
+#
+# Without it, CocoaPods resolves each pod's deployment target from
+# $(RECOMMENDED_IPHONEOS_DEPLOYMENT_TARGET). That build setting is not defined
+# outside a full Xcode build context, so `pod install` dies with:
+#   ArgumentError - Malformed version number string
+#     $(RECOMMENDED_IPHONEOS_DEPLOYMENT_TARGET)
+# which blocks every iOS build. Keep this in step with the Runner target's
+# IPHONEOS_DEPLOYMENT_TARGET in project.pbxproj.
+platform :ios, '15.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'

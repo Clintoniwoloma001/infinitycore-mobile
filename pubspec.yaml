@@ -25,7 +25,11 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # Sections 2, 4, 5 executive UI + Branch Performance 42702 fix + executive
 # role constraint + I-Meet audio signed-URL fix.
 # +13 continues from the active 1.1.2+12.
-version: 1.1.5+15
+# +16 is the Executive BI base release. It ADDS NATIVE PLUGINS, so it cannot be
+# a Shorebird patch and must ship through the App Store / Play Store. Once users
+# install 1.1.6+16, later Dart-only work (analytics, comboboxes, branch
+# attribution) can return to silent OTA patches (patch 17+).
+version: 1.1.6+16
 
 environment:
   sdk: ^3.13.3
@@ -72,6 +76,22 @@ dependencies:
   just_audio: ^0.10.6
   speech_to_text: ^7.5.0
   flutter_tts: ^4.2.5
+
+  # --- 1.1.6+16: OpenStreetMap via PURE DART ---------------------------
+  # `flutter_map` renders OSM tiles with NO native plugin and NO API key, so it
+  # introduces nothing that a Shorebird patch cannot deliver. The previous
+  # google_maps_flutter dependency was removed for exactly this reason.
+  flutter_map: ^6.1.0
+  # Shared LatLng type used by flutter_map and by our own geo maths.
+  latlong2: ^0.9.0
+  # `geocoding` supplies the reverse-geocoded address shown on the live card.
+  #
+  # NOTE: this is the ONLY genuinely new NATIVE plugin left in this release, and
+  # it is already redundant — the server resolves `resolved_place` and
+  # `location_label` for every ping, so the address is already on the row.
+  # Dropping it would remove the last native dependency and let this entire
+  # release ship as a silent Shorebird PATCH instead of a store submission.
+  geocoding: ^4.0.0
 
   # Direct dependency now, because supabase_flutter reaches for it directly and
   # the widget tests import its mock. Relying on a transitive version is

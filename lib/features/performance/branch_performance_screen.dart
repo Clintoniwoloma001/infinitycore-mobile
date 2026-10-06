@@ -24,7 +24,9 @@ import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/common.dart';
 import '../director/director_service.dart';
 import '../director/director_widgets.dart';
+import 'branch_deep_dive_screen.dart';
 import 'branch_sort.dart';
+import 'mpr_service.dart';
 
 /// One branch's row, as computed by the server.
 class BranchPerformance {
@@ -132,6 +134,37 @@ class _BranchPerformanceScreenState extends State<BranchPerformanceScreen> {
     await _load();
   }
 
+  /// Opens the Drag 5 / Soaring 5 deep-dive for one branch.
+  ///
+  /// MPR actuals are keyed by a period label that has to be derived from the
+  /// selected window. A window straddling a month or quarter boundary (Today,
+  /// This week) has no single honest key, so it explains itself rather than
+  /// silently querying a neighbouring period.
+  void _openDeepDive(BranchPerformance branch) {
+    final label = MprPeriod.bestFor(_period.from, _period.to);
+    if (label == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'MPR attribution needs a single month or quarter. Choose '
+            '"This month" or "This quarter" to compare staff.',
+          ),
+        ),
+      );
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => BranchDeepDiveScreen(
+          branchId: branch.id,
+          branchName: branch.name,
+          periodLabel: label,
+          windowLabel: _period.label,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -232,7 +265,7 @@ class _BranchPerformanceScreenState extends State<BranchPerformanceScreen> {
             ),
           ),
           for (final b in sorted) ...[
-            _BranchCard(branch: b),
+            _BranchCard(branch: b, onTap: () => _openDeepDive(b)),
             const SizedBox(height: 10),
           ],
           const SizedBox(height: 4),
@@ -252,13 +285,18 @@ class _BranchPerformanceScreenState extends State<BranchPerformanceScreen> {
 }
 
 class _BranchCard extends StatelessWidget {
-  const _BranchCard({required this.branch});
+  const _BranchCard({required this.branch, this.onTap});
 
   final BranchPerformance branch;
 
+  /// Opens the Drag 5 / Soaring 5 deep-dive. Null when no MPR period key can
+  /// be derived for the current window, in which case the card is not tappable
+  /// rather than opening a screen that can only ever be empty.
+  final VoidCallback? onTap;
+
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final card = Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
         color: AppColors.surface(context),
@@ -321,6 +359,15 @@ class _BranchCard extends StatelessWidget {
           ],
         ],
       ),
+    );
+
+    // A branch with no derivable MPR period key is not tappable. Opening a
+    // deep-dive that can only ever report "no data" trains people to ignore it.
+    if (onTap == null) return card;
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: onTap,
+      child: card,
     );
   }
 }

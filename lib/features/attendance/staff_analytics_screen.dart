@@ -40,10 +40,7 @@ class _StaffAnalyticsScreenState extends State<StaffAnalyticsScreen> {
 
   List<AttendanceManagementRow> _rows = const [];
   StaffAnalyticsReport _report = StaffAnalyticsReport(
-    period: AnalyticsPeriod.of(
-      AnalyticsPeriodType.month,
-      DateTime.now(),
-    ),
+    period: AnalyticsPeriod.of(AnalyticsPeriodType.month, DateTime.now()),
   );
 
   bool _loading = true;
@@ -129,37 +126,84 @@ class _StaffAnalyticsScreenState extends State<StaffAnalyticsScreen> {
       return PageErrorView(message: _error!, onRetry: _load);
     }
 
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(
-          parent: ClampingScrollPhysics(),
-        ),
-        padding: const EdgeInsets.all(16),
-        children: [
-          _periodCard(),
-          const SizedBox(height: 12),
-          if (_report.scored.isEmpty)
-            const SectionCard(
-              title: 'No attendance in this period',
-              children: [
-                Text(
-                  'No attendance records fall inside the selected period. '
-                  'Try a wider range such as a quarter or a year.',
-                ),
-              ],
-            )
-          else ...[
-            _bestEmployeeCard(),
+    return SafeArea(
+      // Only the top needs guarding: the bottom inset is the scroll view's
+      // business, and doubling it would strand the last card above the
+      // gesture bar on devices that have one.
+      bottom: false,
+      child: RefreshIndicator(
+        onRefresh: _load,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(
+            parent: ClampingScrollPhysics(),
+          ),
+          // Top inset plus the 16px the rest of the app uses, so the header
+          // clears the status bar without the content crowding it.
+          padding: EdgeInsets.fromLTRB(
+            16,
+            MediaQuery.paddingOf(context).top + 16,
+            16,
+            28,
+          ),
+          children: [
+            _headerBar(),
             const SizedBox(height: 12),
-            _leaderboardCard(),
+            _periodCard(),
             const SizedBox(height: 12),
-            _comparisonCard(),
-            const SizedBox(height: 12),
-            _searchCard(),
+            if (_report.scored.isEmpty)
+              const SectionCard(
+                title: 'No attendance in this period',
+                children: [
+                  Text(
+                    'No attendance records fall inside the selected period. '
+                    'Try a wider range such as a quarter or a year.',
+                  ),
+                ],
+              )
+            else ...[
+              _bestEmployeeCard(),
+              const SizedBox(height: 12),
+              _leaderboardCard(),
+              const SizedBox(height: 12),
+              _comparisonCard(),
+              const SizedBox(height: 12),
+              _searchCard(),
+            ],
           ],
-        ],
+        ),
       ),
+    );
+  }
+
+  /// Title row with an explicit back affordance.
+  ///
+  /// This screen is pushed as its own route, so it must offer a way out even
+  /// when the surrounding shell does not draw an AppBar. The button is only
+  /// rendered when there is genuinely somewhere to go back to, so it never
+  /// appears as a dead control on the version that opened from a bottom sheet.
+  Widget _headerBar() {
+    final canGoBack = Navigator.of(context).canPop();
+    return Row(
+      children: [
+        if (canGoBack) ...[
+          IconButton(
+            icon: const Icon(Icons.arrow_back),
+            tooltip: 'Back',
+            onPressed: () => Navigator.of(context).maybePop(),
+          ),
+          const SizedBox(width: 4),
+        ],
+        Expanded(
+          child: Text(
+            'Staff Analytics',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textPrimary(context),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -284,10 +328,16 @@ class _StaffAnalyticsScreenState extends State<StaffAnalyticsScreen> {
     final next = switch (_periodType) {
       AnalyticsPeriodType.day => _anchor.add(Duration(days: direction)),
       AnalyticsPeriodType.week => _anchor.add(Duration(days: 7 * direction)),
-      AnalyticsPeriodType.month =>
-        DateTime(_anchor.year, _anchor.month + direction, 1),
-      AnalyticsPeriodType.quarter =>
-        DateTime(_anchor.year, _anchor.month + 3 * direction, 1),
+      AnalyticsPeriodType.month => DateTime(
+        _anchor.year,
+        _anchor.month + direction,
+        1,
+      ),
+      AnalyticsPeriodType.quarter => DateTime(
+        _anchor.year,
+        _anchor.month + 3 * direction,
+        1,
+      ),
       AnalyticsPeriodType.year => DateTime(_anchor.year + direction, 1, 1),
       AnalyticsPeriodType.custom => _anchor,
     };
@@ -452,10 +502,7 @@ class _StaffAnalyticsScreenState extends State<StaffAnalyticsScreen> {
             ),
             Text(
               '${m.score.toStringAsFixed(1)}%',
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-              ),
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
             ),
           ],
         ),
@@ -541,12 +588,12 @@ class _StaffAnalyticsScreenState extends State<StaffAnalyticsScreen> {
     if (c.isEmpty) return const SizedBox.shrink();
 
     return SectionCard(
-      title: 'Comparing ${c.employees.length}'
+      title:
+          'Comparing ${c.employees.length}'
           '${c.employees.length < StaffComparison.maxEmployees ? ' of up to ${StaffComparison.maxEmployees}' : ''}',
       trailing: TextButton(
-        onPressed: () => setState(
-          () => _comparison = const StaffComparison(employees: []),
-        ),
+        onPressed: () =>
+            setState(() => _comparison = const StaffComparison(employees: [])),
         child: const Text('Clear'),
       ),
       children: [
@@ -680,10 +727,7 @@ class _StaffAnalyticsScreenState extends State<StaffAnalyticsScreen> {
       subtitle: Text(
         '${_subtitle(m)}\n${m.records} day${m.records == 1 ? '' : 's'} · '
         '${m.score.toStringAsFixed(1)}%',
-        style: TextStyle(
-          fontSize: 11,
-          color: AppColors.textSecondary(context),
-        ),
+        style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context)),
       ),
       isThreeLine: true,
       onTap: () => _showScorecard(m),
@@ -735,10 +779,7 @@ class _StaffAnalyticsScreenState extends State<StaffAnalyticsScreen> {
           children: [
             Text(
               m.employeeName,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-              ),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 2),
             Text(

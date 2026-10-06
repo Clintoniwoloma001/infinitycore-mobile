@@ -179,6 +179,29 @@ class TrackingDay {
 
   bool get isEmpty => points.isEmpty;
   int get insideCount => points.where((p) => p.insideGeofence).length;
+
+  /// The subset that can actually be drawn, in chronological order.
+  ///
+  /// Points without usable coordinates are dropped here rather than being
+  /// plotted at a default position, so a partially-recorded day still shows
+  /// the real route it does have instead of collapsing into one false marker.
+  List<TrackingPoint> get mappablePoints {
+    final usable = points.where((p) => p.hasCoordinates).toList()
+      ..sort((a, b) {
+        final at = a.recordedAt;
+        final bt = b.recordedAt;
+        // Undated points sort last instead of jumping to the start.
+        if (at == null && bt == null) return 0;
+        if (at == null) return 1;
+        if (bt == null) return -1;
+        return at.compareTo(bt);
+      });
+    return usable;
+  }
+
+  /// Points that were recorded but could not be placed on the map. Surfaced to
+  /// the user so a gap is explained rather than silently hidden.
+  int get unplaceableCount => points.where((p) => !p.hasCoordinates).length;
 }
 
 /// One recorded observation.
@@ -189,6 +212,12 @@ class TrackingPoint {
     required this.insideGeofence,
     required this.locationLabel,
     required this.resolvedPlace,
+    this.latitude,
+    this.longitude,
+    this.accuracy,
+    this.speedMps,
+    this.batteryLevel,
+    this.networkType = '',
   });
 
   factory TrackingPoint.fromJson(Map<String, dynamic> j) => TrackingPoint(
@@ -197,6 +226,16 @@ class TrackingPoint {
     insideGeofence: j['inside_geofence'] == true,
     locationLabel: (j['location_label'] ?? '').toString(),
     resolvedPlace: (j['resolved_place'] ?? '').toString(),
+    // Coordinates and telemetry are additive: older servers and older rows
+    // simply omit them, and a missing value is carried as null rather than
+    // being coerced to 0. A 0,0 pin would drop a breadcrumb in the Gulf of
+    // Guinea and quietly corrupt the route, so this is deliberately strict.
+    latitude: (j['latitude'] as num?)?.toDouble(),
+    longitude: (j['longitude'] as num?)?.toDouble(),
+    accuracy: (j['accuracy'] as num?)?.toDouble(),
+    speedMps: (j['speed_mps'] as num?)?.toDouble(),
+    batteryLevel: (j['battery_level'] as num?)?.toInt(),
+    networkType: (j['network_type'] ?? '').toString(),
   );
 
   final String id;
@@ -204,6 +243,41 @@ class TrackingPoint {
   final bool insideGeofence;
   final String locationLabel;
   final String resolvedPlace;
+  final double? latitude;
+  final double? longitude;
+
+  /// Reported GPS accuracy in metres, when the OS supplied it. Rendered as the
+  /// accuracy radius around the marker so a ±80 m fix never looks exact.
+  final double? accuracy;
+  final double? speedMps;
+  final int? batteryLevel;
+  final String networkType;
+
+  /// Only a point with a real, in-range coordinate may be drawn on the map.
+  bool get hasCoordinates {
+    final lat = latitude;
+    final lon = longitude;
+    if (lat == null || lon == null) return false;
+    // Null Island is the classic sentinel for "GPS never initialised".
+    if (lat == 0 && lon == 0) return false;
+    return lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
+  }
+
+  /// Evidence quality, stated honestly rather than smoothed over. A fix taken
+  /// on a dying battery or with no connectivity is weaker proof of presence,
+  /// and the detail sheet says so instead of presenting it as certain.
+  String? get evidenceNote {
+    final notes = <String>[];
+    final battery = batteryLevel;
+    if (battery != null && battery <= 15) notes.add('low battery ($battery%)');
+    if (networkType.isNotEmpty && networkType != 'unknown') {
+      if (networkType == 'other' || networkType == 'ethernet') {
+        notes.add('network: $networkType');
+      }
+    }
+    if (notes.isEmpty) return null;
+    return 'Weak signal — ${notes.join(', ')}';
+  }
 
   String get place => insideGeofence
       ? (locationLabel.isEmpty ? 'Registered location' : locationLabel)

@@ -5,6 +5,7 @@ import '../../core/security/role_guard.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/common.dart';
+import 'staff_location_map_screen.dart';
 import 'tracking_service.dart';
 
 /// Employee Tracking — SUPER ADMIN ONLY.
@@ -177,7 +178,17 @@ class _EmployeeTrackingScreenState extends State<EmployeeTrackingScreen> {
             )
           else
             for (final p in rows) ...[
-              _PersonCard(person: p),
+              // Tapping a card opens the full-screen OSM map with that
+              // person's live pin, breadcrumb route and movement analysis.
+              InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => StaffLocationMapScreen(employee: p),
+                  ),
+                ),
+                child: _PersonCard(person: p),
+              ),
               const SizedBox(height: 8),
             ],
         ],
