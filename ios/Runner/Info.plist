@@ -63,20 +63,19 @@
 	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.infinitymfb.infinitycore.backgroundtask</string>
+		<string>com.shorebird.update</string>
+	</array>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>
 		<string>fetch</string>
 		<string>processing</string>
 		<string>audio</string>
-		<string>bluetooth-peripheral</string>
-		<string>push-to-talk</string>
 		<string>external-accessory</string>
 		<string>remote-notification</string>
-		<string>bluetooth-central</string>
-		<string>screen-capture</string>
-		<string>nearby-interaction</string>
-		<string>voip</string>
 	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
