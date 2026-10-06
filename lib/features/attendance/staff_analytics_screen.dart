@@ -137,14 +137,8 @@ class _StaffAnalyticsScreenState extends State<StaffAnalyticsScreen> {
           physics: const AlwaysScrollableScrollPhysics(
             parent: ClampingScrollPhysics(),
           ),
-          // Top inset plus the 16px the rest of the app uses, so the header
-          // clears the status bar without the content crowding it.
-          padding: EdgeInsets.fromLTRB(
-            16,
-            MediaQuery.paddingOf(context).top + 16,
-            16,
-            28,
-          ),
+          // Cleaned up padding: SafeArea handles the status bar.
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
           children: [
             _headerBar(),
             const SizedBox(height: 12),

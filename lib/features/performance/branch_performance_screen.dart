@@ -184,8 +184,17 @@ class _BranchPerformanceScreenState extends State<BranchPerformanceScreen> {
   /// selected window. A window straddling a month or quarter boundary (Today,
   /// This week) has no single honest key, so it explains itself rather than
   /// silently querying a neighbouring period.
-  void _openDeepDive(BranchPerformance branch) {
-    final label = MprPeriod.bestFor(_period.from, _period.to);
+  ///
+  /// The deep-dive reads everything it needs from the arguments it is given,
+  /// so a snapshot refresh racing the tap cannot change what it shows.
+    void _openDeepDive(BranchPerformance branch) {
+    // Freeze every input to navigation BEFORE any branch: the period label,
+    // the resolved UUID and the human labels are all captured from this exact
+    // tap, so a snapshot refresh racing the tap cannot change what opens.
+    final period = _period;
+    final filters = _snapshot?.filters ?? const <String, dynamic>{};
+
+    final label = MprPeriod.bestFor(period.from, period.to);
     if (label == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -206,7 +215,7 @@ class _BranchPerformanceScreenState extends State<BranchPerformanceScreen> {
     final uuid = resolveBranchUuid(
       branchId: branch.id,
       branchName: branch.name,
-      filters: _snapshot?.filters ?? const <String, dynamic>{},
+      filters: filters,
     );
     if (uuid == null) {
       final unassigned = branch.name.trim() == 'Unassigned';
@@ -230,7 +239,7 @@ class _BranchPerformanceScreenState extends State<BranchPerformanceScreen> {
           branchId: uuid,
           branchName: branch.name,
           periodLabel: label,
-          windowLabel: _period.label,
+          windowLabel: period.label,
         ),
       ),
     );
