@@ -19,6 +19,7 @@ class AppColors {
   static const slate900 = Color(0xFF0F172A);
   static const slate800 = Color(0xFF1E293B);
   static const slate50 = Color(0xFFF7F9FC);
+  static const white = Color(0xFFFFFFFF);
 
   // Dark InfinityCore palette.
   static const bgDark = Color(0xFF0D1117);

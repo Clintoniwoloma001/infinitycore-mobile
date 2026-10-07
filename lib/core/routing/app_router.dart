@@ -18,6 +18,8 @@ import '../../features/attendance/employee_tracking_screen.dart';
 import '../../features/automation/automation_screen.dart';
 import '../../features/dashboard/home_shell.dart';
 import '../../features/director/director_shell.dart';
+import '../../features/geofences/geofence_coverage_tester_screen.dart';
+import '../../features/geofences/geofence_settings_screen.dart';
 import '../../features/messages/announcements_screen.dart';
 import '../../features/messages/chat_screen.dart';
 import '../../features/messages/comm_admin_screen.dart';
@@ -72,13 +74,29 @@ final GoRouter appRouter = GoRouter(
       path: '/staff-analytics',
       builder: (_, _) => const StaffAnalyticsScreen(),
     ),
-    // Employee Tracking. SUPER ADMIN ONLY on mobile - see
+    // Employee Tracking. Gated on a fixed five-role list - see
     // `canAccessEmployeeTracking` for why this is stricter than the web.
     // The literal path is kept so the routing-wiring test can prove every
     // registered destination has a GoRoute.
     GoRoute(
       path: '/employee-tracking',
       builder: (_, _) => const EmployeeTrackingScreen(),
+    ),
+    // Geofence Settings & Management (Super Admin / Head of HR). The list
+    // screen is the destination; the coverage tester is pushed from it. The
+    // navigation gate lives in `auth_gate.dart` and `require_geofence_admin()`
+    // in Postgres is the actual boundary. The literal path is kept (rather than
+    // `geofenceManagementRoute`) so the routing-wiring test can prove every
+    // registered destination has a GoRoute.
+    GoRoute(
+      path: '/geofences',
+      builder: (_, _) => const GeofenceSettingsScreen(),
+      routes: [
+        GoRoute(
+          path: 'tester',
+          builder: (_, _) => const GeofenceCoverageTesterScreen(),
+        ),
+      ],
     ),
     GoRoute(
       path: '/profile',

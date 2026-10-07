@@ -72,8 +72,8 @@ class LocationForegroundService : Service(), LocationListener {
         // 15 minutes / 100 m. Deliberately not per-second: this is workforce
         // telemetry, not turn-by-turn navigation, and the Dart heartbeat has
         // always used a ~30 minute cadence.
-        private const val MIN_INTERVAL_MS = 15L * 60L * 1000L
-        private const val MIN_DISTANCE_M = 100f
+        private const val MIN_INTERVAL_MS = 2L * 60L * 1000L
+        private const val MIN_DISTANCE_M = 10f
 
         fun start(context: Context, token: String, supabaseUrl: String, rpcPath: String) {
             val intent = Intent(context, LocationForegroundService::class.java).apply {
@@ -236,6 +236,38 @@ class LocationForegroundService : Service(), LocationListener {
      * Posts one fix to the same server RPC the Dart heartbeat uses, so both
      * paths land in the same place with the same semantics.
      */
+
+    // OFFLINE QUEUE: write EVERY fix to SQLite first, then attempt upload.
+    // This matches the Dart-side queue (offline_location_queue.db, same schema).
+    private fun enqueueToSqlite(location: Location, accuracy: Float?, battery: Float?, networkStatus: String?) {
+        try {
+            val dbPath = getDatabasePath("offline_location_queue.db")
+            val conn = org.sqlite.database.sqlite.SQLiteDatabase.openOrCreateDatabase(dbPath.absolutePath, null)
+            conn.execSQL("CREATE TABLE IF NOT EXISTS offline_location_queue (id INTEGER PRIMARY KEY AUTOINCREMENT, employee_id TEXT, latitude REAL, longitude REAL, accuracy REAL, battery_level REAL, network_status TEXT, recorded_at TEXT NOT NULL, is_synced INTEGER DEFAULT 0, attempts INTEGER DEFAULT 0)")
+            conn.execSQL("CREATE INDEX IF NOT EXISTS idx_offline_unsynced ON offline_location_queue(is_synced, recorded_at ASC)")
+            val nowIso = java.time.Instant.ofEpochMilli(System.currentTimeMillis())
+                .atZone(java.time.ZoneOffset.UTC).format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+            val employeeId = accessToken ?: ""  // best-effort; real attribution comes from auth.uid() on server
+            val stmt = conn.compileStatement(
+                "INSERT INTO offline_location_queue (employee_id, latitude, longitude, accuracy, battery_level, network_status, recorded_at, is_synced, attempts) VALUES (?,?,?,?,?,?,?,?,?)"
+            )
+            stmt.bindString(1, employeeId.takeIf { it.isNotBlank() })
+            stmt.bindDouble(2, location.latitude)
+            stmt.bindDouble(3, location.longitude)
+            stmt.bindDouble(4, accuracy?.toDouble() ?: 0.0)
+            stmt.bindDouble(5, battery?.toDouble() ?: 0.0)
+            stmt.bindString(6, networkStatus ?: "unknown")
+            stmt.bindString(7, nowIso)
+            stmt.bindLong(8, 0)  // is_synced = 0
+            stmt.bindLong(9, 0)  // attempts = 0
+            stmt.executeInsert()
+            stmt.close()
+            conn.close()
+        } catch (e: Exception) {
+            Log.w(TAG, "offline queue sqlite insert failed: ${e.message}")
+        }
+    }
+
     private fun upload(location: Location) {
         val token = accessToken ?: return
         val base = supabaseUrl ?: return
@@ -259,6 +291,9 @@ class LocationForegroundService : Service(), LocationListener {
             "\"p_accuracy\":$accuracy,\"p_recorded_at\":\"$recordedAt\"," +
             "\"p_source\":\"mobile\",\"p_source_detail\":\"foreground_service\"}"
 
+        // Queue first (even if upload fails).
+        enqueueToSqlite(location, if (location.hasAccuracy()) location.accuracy else null,
+            null, null)  // battery/network: best effort; add BatteryManager if needed
         val conn = URL(base.trimEnd('/') + path).openConnection() as HttpURLConnection
         try {
             conn.requestMethod = "POST"

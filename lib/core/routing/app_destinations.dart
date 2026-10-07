@@ -158,12 +158,14 @@ List<AppDestination> appDestinations() => const [
 
   // Employee Tracking.
   //
-  // OWNERSHIP: SUPER ADMIN ONLY on mobile. This is deliberately narrower than
-  // the web, where `trackingGate` consults employee_tracking_access() and so
-  // also admits a delegated tracking grantee. On a phone we do not delegate
-  // precise staff location at all: the device is easier to lose or lend than a
-  // managed desktop, so the gate is a single role rather than the RPC's answer.
-  // Gated by capability in [visibleDestinations], consistent with ACC and Staff
+  // OWNERSHIP: a fixed five-role list — Super Admin, Head of HR and the
+  // executive family (MD/CEO, Chairman, Director) — mirrored by
+  // [canAccessEmployeeTracking]. This is deliberately narrower than the web,
+  // where `trackingGate` consults employee_tracking_access() and so also admits
+  // a delegated tracking grantee. On a phone we do not delegate precise staff
+  // location at all: the device is easier to lose or lend than a managed
+  // desktop, so the gate is a role list rather than the RPC's answer. Gated by
+  // capability in [visibleDestinations], consistent with ACC and Staff
   // Analytics above.
   AppDestination(
     id: 'employee-tracking',
@@ -171,6 +173,22 @@ List<AppDestination> appDestinations() => const [
     subtitle: 'Live staff positions',
     icon: Icons.location_on_outlined,
     route: employeeTrackingRoute,
+  ),
+
+  // Geofence Settings & Management.
+  //
+  // OWNERSHIP: Super Admin and Head of HR only, mirroring
+  // `public.is_geofence_admin()` — the same two-role audience as the
+  // /bound-devices screen. Untagged and gated by capability in
+  // [visibleDestinations], because the audience is a ROLE set rather than a
+  // department (an HR-department tag alone would hand it to every HR Officer,
+  // which the server would then refuse).
+  AppDestination(
+    id: 'geofences',
+    label: 'Geofence Settings',
+    subtitle: 'Branch fences and coverage tester',
+    icon: Icons.gps_fixed,
+    route: geofenceManagementRoute,
   ),
 ];
 
@@ -225,9 +243,12 @@ List<AppDestination> visibleDestinations() {
           // Role-gated rather than department-gated, because the audience is
           // every role allowed to manage attendance.
           'staff-analytics' => canManageAttendance(role),
-          // SUPER ADMIN ONLY. Precise staff location is not delegated on
-          // mobile, so this is a single role and not the RPC's answer.
+          // A fixed five-role list (Super Admin, Head of HR, MD/CEO,
+          // Chairman, Director). Precise staff location is not DELEGATED on
+          // mobile, so this is a role list and not the RPC's answer.
           'employee-tracking' => canAccessEmployeeTracking(role),
+          // Super Admin / Head of HR only, mirroring `is_geofence_admin()`.
+          'geofences' => canManageGeofences(role),
           _ => true,
         },
       )

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/routing/app_router.dart';
 import '../../core/security/role_guard.dart';
 import '../../core/services/auth_service.dart';
+import '../../core/services/supabase_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../dashboard/home_shell.dart';
 import '../../shared/utils/formatters.dart';
@@ -37,8 +38,29 @@ class CommAdminScreen extends StatelessWidget {
       );
     }
 
+    // Global DM transparency (spec Part 2) is reserved to super_admin only.
+    final isSuper = AuthService.instance.role == AppRoles.superAdmin;
+    final tabs = <Widget>[
+      const Tab(text: 'Overview'),
+      const Tab(text: 'Channels'),
+      const Tab(text: 'Moderation'),
+      const Tab(text: 'Audit'),
+      const Tab(text: 'Retention'),
+      const Tab(text: 'Exports'),
+      if (isSuper) const Tab(text: 'DM Inspection'),
+    ];
+    final views = <Widget>[
+      const _OverviewTab(),
+      const _ChannelsTab(),
+      const _ModerationTab(),
+      const _AuditTab(),
+      const _RetentionTab(),
+      const _ExportsTab(),
+      if (isSuper) const _DmInspectionTab(),
+    ];
+
     return DefaultTabController(
-      length: 6,
+      length: tabs.length,
       child: Scaffold(
         appBar: shellAppBar(context, title: 'Comm Admin'),
         body: Column(
@@ -48,26 +70,10 @@ class CommAdminScreen extends StatelessWidget {
               tabAlignment: TabAlignment.start,
               labelColor: AppColors.accent(context),
               indicatorColor: AppColors.accent(context),
-              tabs: const [
-                Tab(text: 'Overview'),
-                Tab(text: 'Channels'),
-                Tab(text: 'Moderation'),
-                Tab(text: 'Audit'),
-                Tab(text: 'Retention'),
-                Tab(text: 'Exports'),
-              ],
+              tabs: tabs,
             ),
             Expanded(
-              child: TabBarView(
-                children: const [
-                  _OverviewTab(),
-                  _ChannelsTab(),
-                  _ModerationTab(),
-                  _AuditTab(),
-                  _RetentionTab(),
-                  _ExportsTab(),
-                ],
-              ),
+              child: TabBarView(children: views),
             ),
           ],
         ),
@@ -778,3 +784,300 @@ class _ExportsTabState extends State<_ExportsTab> {
     );
   }
 }
+
+/// Super Admin DM Inspection (spec Part 2 — global transparency).
+/// Pick a staff member -> list their DM threads -> open a transcript ->
+/// export (logged). "Return to My Direct Messages" resets the panel.
+/// Enforcement is server-side: the widened `chat_threads read own` RLS and
+/// `can_read_message` is_super_admin bypass decide what is ever returned.
+class _DmInspectionTab extends StatefulWidget {
+  const _DmInspectionTab();
+
+  @override
+  State<_DmInspectionTab> createState() => _DmInspectionTabState();
+}
+
+class _DmInspectionTabState extends State<_DmInspectionTab> {
+  final _svc = CommunicationService.instance;
+  List<Map<String, dynamic>> _people = [];
+  String? _selectedUserId;
+  List<Map<String, dynamic>> _threads = [];
+  List<Map<String, dynamic>> _messages = [];
+  Map<String, Map<String, dynamic>> _identity = {};
+  bool _loadingPeople = true;
+  bool _loadingThreads = false;
+  bool _loadingMessages = false;
+  bool _exporting = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPeople();
+  }
+
+  Future<void> _loadPeople() async {
+    setState(() { _loadingPeople = true; _error = null; });
+    try {
+      final me = SupabaseService.client.auth.currentUser?.id ?? '';
+      final rows = await _svc.messagingDirectory();
+      if (!mounted) return;
+      setState(() {
+        _people = rows.where((r) => '${r['id'] ?? ''}' != me).toList();
+        _loadingPeople = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadingPeople = false;
+        _error = CommunicationService.friendlyError(
+          e, fallback: 'Could not load the staff directory.',
+        );
+      });
+    }
+  }
+
+  String _nameOf(String id) {
+    final ident = _identity[id];
+    final identName = '${ident?['full_name'] ?? ident?['email'] ?? ''}';
+    if (identName.isNotEmpty) return identName;
+    for (final p in _people) {
+      if ('${p['id'] ?? ''}' == id) {
+        final n = '${p['full_name'] ?? p['email'] ?? ''}';
+        if (n.isNotEmpty) return n;
+      }
+    }
+    return 'Unknown User';
+  }
+
+  Future<void> _pickUser(String userId) async {
+    setState(() {
+      _selectedUserId = userId;
+      _loadingThreads = true;
+      _error = null;
+      _threads = [];
+      _messages = [];
+    });
+    try {
+      final list = await _svc.threadsForUser(userId);
+      final ids = <String>{userId};
+      for (final t in list) {
+        ids.add('${t['member_a'] ?? ''}');
+        ids.add('${t['member_b'] ?? ''}');
+      }
+      final dir = await _svc.resolveDirectory(ids.toList());
+      if (!mounted) return;
+      setState(() {
+        _threads = list;
+        _identity = dir;
+        _loadingThreads = false;
+        if (list.isEmpty) _error = 'No direct-message threads found for this user.';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadingThreads = false;
+        _error = CommunicationService.friendlyError(
+          e, fallback: 'Could not load threads.',
+        );
+      });
+    }
+  }
+
+
+  Future<void> _openThread(String threadId) async {
+    setState(() { _loadingMessages = true; _error = null; _messages = []; });
+    try {
+      final rows = await SupabaseService.client
+          .from('chat_messages')
+          .select()
+          .eq('thread_id', threadId)
+          .eq('message_type', 'direct')
+          .order('created_at')
+          .limit(500);
+      final list = asRows(rows);
+      final ids = list.map((m) => '${m['sender_id'] ?? ''}').toSet().toList();
+      final dir = await _svc.resolveDirectory(ids);
+      if (!mounted) return;
+      setState(() {
+        _messages = list;
+        _identity = {..._identity, ...dir};
+        _loadingMessages = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadingMessages = false;
+        _error = CommunicationService.friendlyError(
+          e, fallback: 'Could not load this transcript.',
+        );
+      });
+    }
+  }
+
+  Future<void> _export(String format) async {
+    if (_messages.isEmpty || _selectedUserId == null) return;
+    setState(() { _exporting = true; _error = null; });
+    try {
+      await _svc.exportRecords(
+        format: format,
+        scope: 'search',
+        reason: 'Super Admin DM inspection',
+        query: 'dm_inspection',
+        filters: {'kind': 'dm_inspection', 'inspected_user': _selectedUserId},
+      );
+      if (!mounted) return;
+      setState(() => _exporting = false);
+      showSnack('Inspection export generated and logged '
+          '(${_messages.length} messages).');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _exporting = false;
+        _error = CommunicationService.friendlyError(e, fallback: 'Export failed.');
+      });
+    }
+  }
+
+  void _returnToMine() {
+    setState(() {
+      _selectedUserId = null;
+      _threads = [];
+      _messages = [];
+      _error = null;
+    });
+  }
+
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = _selectedUserId;
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const _SectionHeading('Direct-message inspection (Super Admin)'),
+        const SizedBox(height: 6),
+        const _MutedNote(
+          'Global DM transparency is reserved to the Super Admin role. '
+          'Every inspection export is recorded in the audit trail.',
+        ),
+        const SizedBox(height: 14),
+        if (_error != null) ...[
+          Text(_error!, style: const TextStyle(color: AppColors.rose, fontSize: 12)),
+          const SizedBox(height: 10),
+        ],
+        DropdownButtonFormField<String>(
+          initialValue: selected,
+          decoration: const InputDecoration(
+            labelText: 'Inspect a staff member',
+            border: OutlineInputBorder(),
+          ),
+          items: [
+            const DropdownMenuItem<String>(value: null, child: Text('Select a user…')),
+            ..._people.map(
+              (p) => DropdownMenuItem<String>(
+                value: '${p['id'] ?? ''}',
+                child: Text('${p['full_name'] ?? p['email'] ?? p['id']}'),
+              ),
+            ),
+          ],
+          onChanged: (v) { if (v != null) _pickUser(v); },
+        ),
+        const SizedBox(height: 10),
+        OutlinedButton.icon(
+          onPressed: selected == null ? null : _returnToMine,
+          icon: const Icon(Icons.arrow_back, size: 16),
+          label: const Text('Return to My Direct Messages'),
+        ),
+        if (_loadingPeople || _loadingThreads) ...[
+          const SizedBox(height: 16),
+          const Center(child: CircularProgressIndicator()),
+        ],
+        if (!_loadingThreads && selected != null && _threads.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          const _SectionHeading('Threads'),
+          ..._threads.map((t) {
+            final other = '${t['member_a'] ?? ''}' == selected
+                ? '${t['member_b'] ?? ''}'
+                : '${t['member_a'] ?? ''}';
+            return ListTile(
+              dense: true,
+              leading: const Icon(Icons.mail_outline, size: 18),
+              title: Text(_nameOf(other)),
+              subtitle: Text('${t['last_message'] ?? 'No messages yet'}'),
+              trailing: Text(
+                _shortDate('${t['last_message_at'] ?? ''}'),
+                style: const TextStyle(fontSize: 11),
+              ),
+              onTap: () => _openThread('${t['id']}'),
+            );
+          }),
+        ],
+
+        if (_loadingMessages) ...[
+          const SizedBox(height: 16),
+          const Center(child: CircularProgressIndicator()),
+        ],
+        if (!_loadingMessages && _messages.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              const Expanded(child: _SectionHeading('Transcript')),
+              TextButton.icon(
+                onPressed: _exporting ? null : () => _export('csv'),
+                icon: const Icon(Icons.download, size: 16),
+                label: const Text('CSV'),
+              ),
+              TextButton.icon(
+                onPressed: _exporting ? null : () => _export('pdf'),
+                icon: const Icon(Icons.picture_as_pdf, size: 16),
+                label: const Text('PDF'),
+              ),
+            ],
+          ),
+          if (_exporting) const Center(child: CircularProgressIndicator()),
+          ..._messages.map(
+            (m) => Card(
+              margin: const EdgeInsets.symmetric(vertical: 4),
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _nameOf('${m['sender_id'] ?? ''}'),
+                            style: const TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          _shortDate('${m['created_at'] ?? ''}'),
+                          style: const TextStyle(fontSize: 11),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text('${m['body'] ?? ''}'),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  static String _shortDate(String iso) {
+    if (iso.isEmpty) return '';
+    final d = DateTime.tryParse(iso);
+    if (d == null) return '';
+    return '${d.year}-${d.month.toString().padLeft(2, '0')}-'
+        '${d.day.toString().padLeft(2, '0')}';
+  }
+}
+

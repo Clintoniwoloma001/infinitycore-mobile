@@ -34,6 +34,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:geolocator/geolocator.dart';
 
 import 'supabase_service.dart';
+import 'offline_location_queue.dart';
 
 class LocationHeartbeat {
   LocationHeartbeat._();
@@ -303,6 +304,16 @@ class LocationHeartbeat {
         'captured_for': _boundUserId,
       };
 
+      // OFFLINE QUEUE (SQLite): ALWAYS insert first, before any upload attempt.
+      await OfflineLocationQueue.instance.enqueue(
+        latitude: position.latitude,
+        longitude: position.longitude,
+        accuracy: position.accuracy,
+        batteryLevel: null, // battery_plus would provide this; kept null if plugin unavailable
+        networkStatus: null,
+        employeeId: _boundUserId,
+      );
+
       // Signed out but still bound to an employee: hold the point on device
       // rather than trying to upload it. There is no session for the server to
       // attribute it to, and an unattributed write would be worse than a
@@ -400,7 +411,7 @@ class LocationHeartbeat {
     }
   }
 
-  Future<List<Map<String, dynamic>>> _readQueue() async {
+  Future<List<Map<String, dynamic>>> _readQueueLegacy() async {
     try {
       final raw = await _storage.read(key: _queueKey);
       if (raw == null || raw.isEmpty) return [];
@@ -412,7 +423,7 @@ class LocationHeartbeat {
     }
   }
 
-  Future<void> _writeQueue(List<Map<String, dynamic>> items) async {
+  Future<void> _writeQueueLegacy(List<Map<String, dynamic>> items) async {
     try {
       await _storage.write(key: _queueKey, value: jsonEncode(items));
       _pendingCount = items.length;
@@ -424,12 +435,12 @@ class LocationHeartbeat {
   /// Queue holds at most [maxQueue] entries; the oldest are the least useful
   /// for a movement history, so they go first.
   Future<void> _enqueue(Map<String, dynamic> observation) async {
-    final items = await _readQueue();
+    final items = await OfflineLocationQueue.instance.getUnsynced();
     items.add(observation);
     if (items.length > maxQueue) {
       items.removeRange(0, items.length - maxQueue);
     }
-    await _writeQueue(items);
+    // SQLite writes handled directly by enqueue/flush; no JSON write.
   }
 
   /// Retry queued observations oldest-first. Each keeps its original
@@ -439,23 +450,37 @@ class LocationHeartbeat {
   /// Anything tagged for a different account is dropped rather than uploaded:
   /// the previous employee's positions must never be attributed to whoever
   /// signed in afterwards.
+  /// Flush from SQLite queue: select unsynced, chunk 200, batch RPC, mark synced.
   Future<void> _flushQueue() async {
-    final items = await _readQueue();
-    if (items.isEmpty) {
+    final unsynced = await OfflineLocationQueue.instance.getUnsynced();
+    if (unsynced.isEmpty) {
       _pendingCount = 0;
       return;
     }
-    final remaining = <Map<String, dynamic>>[];
-    for (final item in items) {
-      final capturedFor = item['captured_for'];
-      if (capturedFor != null && capturedFor != _boundUserId) {
-        // Belongs to another account. Delete it.
-        continue;
+    // Chunk of 200 ordered by recorded_at.
+    final chunk = unsynced.take(200).toList();
+    final payload = chunk.map((row) => <String, dynamic>{
+      'latitude':  row['latitude'],
+      'longitude': row['longitude'],
+      'accuracy':  row['accuracy'],
+      'recorded_at': row['recorded_at'],
+      'battery_level': row['battery_level'],
+      'network_status': row['network_status'],
+      'source': 'mobile_offline_queue',
+      'source_detail': 'background_sync',
+    }).toList();
+    try {
+      final res = await SupabaseService.client.rpc('sync_offline_location_batch', params: {'p_locations': payload});
+      if (res is Map && res['status'] == 'synced') {
+        final syncedIds = chunk.map((r) => r['id'] as int).toList();
+        await OfflineLocationQueue.instance.markSynced(syncedIds);
+      } else {
+        // Leave untouched; retry on next tick.
+        await OfflineLocationQueue.instance.incrementAttempts(chunk.map((r) => r['id'] as int).toList());
       }
-      final result = await _upload(item);
-      if (result == _UploadResult.retry) remaining.add(item);
+    } catch (_) {
+      // Failure: leave untouched for retry.
     }
-    await _writeQueue(remaining);
   }
 
   /// Upload everything queued, oldest first.
@@ -469,6 +494,9 @@ class LocationHeartbeat {
   /// identity, so a batch that was actually accepted but whose acknowledgement
   /// was lost is retried without creating a duplicate row.
   Future<void> syncPending() async {
+    // Flush from SQLite queue instead of JSON blob.
+    // The native service writes to SQLite; Dart flush reads unsynced rows,
+    // sends chunks of 200 via the batch RPC, and marks them synced.
     if (_localOnly) return; // no session: nothing may be attributed
     if (_syncing) return; // a drain is already running
     _syncing = true;
@@ -504,7 +532,7 @@ class LocationHeartbeat {
 
   /// Observations waiting for a connection.
   Future<int> pendingCount() async {
-    final items = await _readQueue();
+    final items = await OfflineLocationQueue.instance.getUnsynced();
     _pendingCount = items.length;
     return _pendingCount;
   }

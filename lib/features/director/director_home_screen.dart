@@ -32,10 +32,60 @@ class _DirectorHomeScreenState extends State<DirectorHomeScreen> {
   String? _error;
   DirectorPeriod _period = DirectorPeriod.thisMonth();
 
+  /// Bounds for the custom date-range picker. Kept only for the currently
+  /// selected Custom window so the picker can be re-opened without losing the
+  /// user's chosen dates.
+  DateTime? _customFrom;
+  DateTime? _customTo;
+
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  Future<void> _openCustomRange() async {
+    final now = DateTime.now();
+    final lower = DateTime(now.year, now.month, now.day);
+    // Custom-mode bounds: an inclusive start on/ after the start of the
+    // current day, and an end on/ before 365 days out — the RPC rejects a
+    // future end date, so we keep the picker inside a valid window.
+    final lastDate = lower.add(const Duration(days: 365));
+    final picked = await showDateRangePicker(
+      context: context,
+      initialDateRange: _customFrom != null && _customTo != null
+          ? DateTimeRange(start: _customFrom!, end: _customTo!)
+          : DateTimeRange(start: lower, end: lastDate),
+      firstDate: lower,
+      lastDate: lastDate,
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: Theme.of(context).colorScheme.copyWith(
+                  primary: AppColors.blue,
+                  onPrimary: AppColors.white,
+                  surface: AppColors.surface(context),
+                  onSurface: AppColors.textPrimary(context),
+                ),
+          ),
+          child: child!,
+        );
+      },
+      helpText: 'Tap a start date and an end date.',
+      cancelText: 'Cancel',
+      confirmText: 'Apply',
+      errorFormatText: 'Enter a valid date range.',
+      fieldStartLabelText: 'From',
+      fieldEndLabelText: 'To',
+    );
+    if (picked == null || !mounted) return;
+    final range = DirectorPeriod.custom(picked.start, picked.end);
+    setState(() {
+      _period = range;
+      _customFrom = picked.start;
+      _customTo = picked.end;
+    });
+    await _load();
   }
 
   Future<void> _load() async {
@@ -96,6 +146,7 @@ class _DirectorHomeScreenState extends State<DirectorHomeScreen> {
                 setState(() => _period = p);
                 _load();
               },
+              onCustomSelected: _openCustomRange,
             ),
             const SizedBox(height: 12),
             // "Absent" and "Present" are STAFF headcounts for the selected
@@ -272,10 +323,15 @@ class _DirectorHomeScreenState extends State<DirectorHomeScreen> {
 }
 
 class _PeriodSelector extends StatelessWidget {
-  const _PeriodSelector({required this.period, required this.onChanged});
+  const _PeriodSelector({
+    required this.period,
+    required this.onChanged,
+    this.onCustomSelected,
+  });
 
   final DirectorPeriod period;
   final ValueChanged<DirectorPeriod> onChanged;
+  final VoidCallback? onCustomSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -288,19 +344,28 @@ class _PeriodSelector extends StatelessWidget {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
-        children: choices
-            .map(
-              (p) => Padding(
-                padding: const EdgeInsets.only(right: 6),
-                child: ChoiceChip(
-                  label: Text(p.label, style: const TextStyle(fontSize: 11)),
-                  selected: period.label == p.label,
-                  onSelected: (_) => onChanged(p),
-                  visualDensity: VisualDensity.compact,
-                ),
+        children: [
+          ...choices.map(
+            (p) => Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: ChoiceChip(
+                label: Text(p.label, style: const TextStyle(fontSize: 11)),
+                selected: period.label == p.label,
+                onSelected: (_) => onChanged(p),
+                visualDensity: VisualDensity.compact,
               ),
-            )
-            .toList(),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: ChoiceChip(
+              label: const Text('Custom', style: TextStyle(fontSize: 11)),
+              selected: period.label == 'Custom',
+              onSelected: (_) => onCustomSelected?.call(),
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+        ],
       ),
     );
   }

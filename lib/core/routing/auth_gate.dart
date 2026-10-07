@@ -130,15 +130,25 @@ String? redirectDecision(AuthGateState auth, String loc, Uri uri) {
     return '/home';
   }
 
-  // Employee Tracking is SUPER ADMIN ONLY on mobile, which is STRICTER than the
-// web: a tracking GRANT issued on web deliberately does not open it here.
-// Redirecting rather than rendering a refusal screen, so the destination is
-// never mounted at all for anyone else. The server refuses the RPC regardless,
-// which is the real boundary.
-if (loc == employeeTrackingRoute &&
-    !canAccessEmployeeTracking(auth.role)) {
-  return '/home';
-}
+  // Employee Tracking is gated on a fixed five-role list (Super Admin, Head
+  // of HR, MD/CEO, Chairman, Director), which is STRICTER than the web: a
+  // tracking GRANT issued on web deliberately does not open it here.
+  // Redirecting rather than rendering a refusal screen, so the destination is
+  // never mounted at all for anyone else. The server refuses the RPC regardless,
+  // which is the real boundary.
+  if (loc == employeeTrackingRoute &&
+      !canAccessEmployeeTracking(auth.role)) {
+    return '/home';
+  }
+
+  // Geofence Settings & Management is restricted to Super Admin / Head of HR,
+  // mirroring `public.is_geofence_admin()`. Hiding the nav entry is not the
+  // control: an unauthorized user who deep-links here is redirected away before
+  // any screen mounts and before any fence is read. The authoritative check
+  // remains `require_geofence_admin()` inside every geofence RPC.
+  if (loc == geofenceManagementRoute && !canManageGeofences(auth.role)) {
+    return '/home';
+  }
 
 // Bound-device management is restricted to Super Admin / Head of HR.
   if (loc == '/bound-devices' &&

@@ -127,10 +127,15 @@ const String executiveRoute = '/director';
 /// reads the same server-authoritative summary RPC.
 const String staffAnalyticsRoute = '/staff-analytics';
 
-/// Employee Tracking. Super Admin only on mobile — see
-/// [canAccessEmployeeTracking]. Kept as a constant so the router, the menu and
-/// the auth gate cannot drift apart on the path string.
+/// Employee Tracking. Super Admin + Head of HR + executive family on mobile —
+/// see [canAccessEmployeeTracking]. Kept as a constant so the router, the menu
+/// and the auth gate cannot drift apart on the path string.
 const String employeeTrackingRoute = '/employee-tracking';
+
+/// Geofence Settings / Management (fence list + the interactive coverage
+/// tester). Kept as a constant for the same reason as
+/// [employeeTrackingRoute]; see [canManageGeofences].
+const String geofenceManagementRoute = '/geofences';
 
 /// True when this role gets the executive workspace as its HOME experience.
 ///
@@ -489,23 +494,58 @@ bool canManageAttendance(String role) => const [
   AppRoles.branchManager,
 ].contains(role);
 
-/// Employee Tracking — SUPER ADMIN ONLY on mobile.
+/// Employee Tracking — Super Admin, Head of HR and the executive family
+/// (MD/CEO, Chairman, Director) on mobile.
 ///
-/// This is deliberately STRICTER than the web, where `trackingGate` consults the
-/// server's `employee_tracking_access()` and therefore also admits a time-boxed
-/// grantee. Mobile opts out of that delegation deliberately: precise staff
-/// location is the most sensitive data the bank holds, and a phone is a device
-/// that is far easier to lose, lend or share than a managed desktop.
+/// The mobile audience is a fixed ROLE LIST rather than the web's
+/// `trackingGate`, which consults the server's `employee_tracking_access()`
+/// and therefore also admits a time-boxed grantee. Mobile opts out of that
+/// delegation deliberately: precise staff location is the most sensitive data
+/// the bank holds, and a phone is a device that is far easier to lose, lend or
+/// share than a managed desktop.
 ///
 /// The consequence is intentional and worth stating: a tracking grant issued on
-/// web does NOT open this screen on mobile. Only Super Admin does. If a delegated
-/// viewer needs mobile access, that is a decision to make explicitly, not a side
-/// effect of the two platforms disagreeing.
+/// web does NOT open this screen on mobile. If a delegated viewer needs mobile
+/// access, that is a decision to make explicitly, not a side effect of the two
+/// platforms disagreeing.
+///
+/// The five roles here are exactly the baseline roles added to
+/// `employee_tracking_access()` in
+/// `supabase/migrations/20261102000001_geofence_management_rbac.sql`, so the
+/// server now admits precisely the same baseline audience this gate admits.
+/// `hr_manager` is carried too for the same rename-tolerance reason as
+/// [canManageGeofences]: it is the legacy spelling of the Head of HR role.
 ///
 /// This is a NAVIGATION gate. The real boundary is still the server: every
 /// tracking RPC checks `employee_tracking_access()` and refuses regardless of what
 /// the client believes.
-bool canAccessEmployeeTracking(String role) => role == AppRoles.superAdmin;
+bool canAccessEmployeeTracking(String role) => const [
+  AppRoles.superAdmin,
+  AppRoles.headOfHumanResources,
+  AppRoles.hrManager,
+  AppRoles.mdCeo,
+  AppRoles.chairman,
+  AppRoles.director,
+].contains(role);
+
+/// Geofence Settings / Management — Super Admin and Head of HR.
+///
+/// Mirrors `public.is_geofence_admin()` in
+/// `supabase/migrations/20261102000001_geofence_management_rbac.sql`, which is
+/// the real authority behind every geofence RPC (it raises SQLSTATE 42501 for
+/// anyone else). `hr_manager` is accepted alongside
+/// `head_of_human_resources` for the same rename-tolerance reason as
+/// [canAccessCommAdmin]: the legacy `hr_manager` spelling still exists in
+/// `profiles.role` and in the database helper.
+///
+/// This is a NAVIGATION gate only. Editing a fence through a deep link still
+/// hits `save_branch_geofence` / `delete_branch_geofence`, which call
+/// `require_geofence_admin()` and refuse.
+bool canManageGeofences(String role) => const [
+  AppRoles.superAdmin,
+  AppRoles.headOfHumanResources,
+  AppRoles.hrManager,
+].contains(role);
 
 /// Communication Administration access.
 ///

@@ -40,6 +40,7 @@ const _allRoutes = <String>[
   '/attendance-management',
   '/profile',
   '/bound-devices',
+  '/geofences',
 ];
 
 void main() {
@@ -69,6 +70,7 @@ void main() {
         '/attendance-management',
         '/profile',
         '/bound-devices',
+        '/geofences',
       ];
       for (final status in const [AuthStatus.unknown, AuthStatus.resolving]) {
         for (final route in protectedRoutes) {
@@ -190,6 +192,44 @@ void main() {
             '/bound-devices',
           ),
           '/home',
+        );
+      }
+    });
+
+    test('geofence settings is restricted to Super Admin / Head of HR', () {
+      // Same audience as /bound-devices and as the server's
+      // `is_geofence_admin()`. `hr_manager` is the legacy spelling of the Head
+      // of HR role and is accepted for the same rename-tolerance reason the
+      // database helper accepts it.
+      for (final role in const [
+        AppRoles.superAdmin,
+        AppRoles.headOfHumanResources,
+        AppRoles.hrManager,
+      ]) {
+        expect(
+          _decide(
+            _FakeAuth(status: AuthStatus.authenticated, role: role),
+            '/geofences',
+          ),
+          isNull,
+          reason: '$role must reach geofence settings',
+        );
+      }
+      for (final role in const [
+        AppRoles.staff,
+        AppRoles.branchManager,
+        AppRoles.hrOfficer,
+        AppRoles.admin,
+        AppRoles.director,
+        AppRoles.customer,
+      ]) {
+        expect(
+          _decide(
+            _FakeAuth(status: AuthStatus.authenticated, role: role),
+            '/geofences',
+          ),
+          '/home',
+          reason: '$role must be redirected away from geofence settings',
         );
       }
     });

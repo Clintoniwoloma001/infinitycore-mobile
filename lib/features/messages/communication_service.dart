@@ -908,4 +908,31 @@ class CommunicationService {
     }
     return map;
   }
+
+  /// Full staff directory (SECURITY DEFINER RPC). Powers the Super Admin
+  /// "inspect this user" picker in the DM Inspection tab.
+  Future<List<Map<String, dynamic>>> messagingDirectory({
+    String? search,
+  }) async {
+    return _rows(
+      await SupabaseService.client.rpc(
+        'get_messaging_directory',
+        params: {'p_search': search},
+      ),
+    );
+  }
+
+  /// Super Admin DM inspection: every direct thread [userId] participates in.
+  /// Requires the widened `chat_threads read own` RLS (is_super_admin bypass);
+  /// a non-super caller simply gets an empty list from the server.
+  Future<List<Map<String, dynamic>>> threadsForUser(String userId) async {
+    if (userId.isEmpty) return const [];
+    return _rows(
+      await SupabaseService.client
+          .from('chat_threads')
+          .select('*')
+          .or('member_a.eq.$userId,member_b.eq.$userId')
+          .order('last_message_at', ascending: false),
+    );
+  }
 }
