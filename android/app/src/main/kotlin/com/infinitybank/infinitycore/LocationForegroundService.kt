@@ -27,6 +27,7 @@ import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import android.database.sqlite.SQLiteDatabase
 
 /**
  * Foreground service that keeps recording work-location fixes while the app is
@@ -242,7 +243,7 @@ class LocationForegroundService : Service(), LocationListener {
     private fun enqueueToSqlite(location: Location, accuracy: Float?, battery: Float?, networkStatus: String?) {
         try {
             val dbPath = getDatabasePath("offline_location_queue.db")
-            val conn = org.sqlite.database.sqlite.SQLiteDatabase.openOrCreateDatabase(dbPath.absolutePath, null)
+            val conn = SQLiteDatabase.openOrCreateDatabase(dbPath.absolutePath, null)
             conn.execSQL("CREATE TABLE IF NOT EXISTS offline_location_queue (id INTEGER PRIMARY KEY AUTOINCREMENT, employee_id TEXT, latitude REAL, longitude REAL, accuracy REAL, battery_level REAL, network_status TEXT, recorded_at TEXT NOT NULL, is_synced INTEGER DEFAULT 0, attempts INTEGER DEFAULT 0)")
             conn.execSQL("CREATE INDEX IF NOT EXISTS idx_offline_unsynced ON offline_location_queue(is_synced, recorded_at ASC)")
             val nowIso = java.time.Instant.ofEpochMilli(System.currentTimeMillis())
@@ -251,7 +252,7 @@ class LocationForegroundService : Service(), LocationListener {
             val stmt = conn.compileStatement(
                 "INSERT INTO offline_location_queue (employee_id, latitude, longitude, accuracy, battery_level, network_status, recorded_at, is_synced, attempts) VALUES (?,?,?,?,?,?,?,?,?)"
             )
-            stmt.bindString(1, employeeId.takeIf { it.isNotBlank() })
+            stmt.bindString(1, employeeId.takeIf { it.isNotBlank() } ?: "")
             stmt.bindDouble(2, location.latitude)
             stmt.bindDouble(3, location.longitude)
             stmt.bindDouble(4, accuracy?.toDouble() ?: 0.0)
