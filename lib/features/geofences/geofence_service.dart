@@ -14,19 +14,39 @@ class BranchOption {
     this.longitude,
   });
 
-  factory BranchOption.fromJson(Map<String, dynamic> json) => BranchOption(
-    id: '${json['id'] ?? ''}',
-    branchName: '${json['branch_name'] ?? 'Branch'}',
-    branchCode: '${json['branch_code'] ?? ''}',
-    latitude: (json['latitude'] as num?)?.toDouble(),
-    longitude: (json['longitude'] as num?)?.toDouble(),
-  );
+  factory BranchOption.fromJson(Map<String, dynamic> json) =>
+      BranchOption(
+        id: _field(json, 'id') ?? '',
+        branchName: _branchNameOf(json),
+        branchCode: _branchCodeOf(json),
+        latitude: (json['latitude'] as num?)?.toDouble(),
+        longitude: (json['longitude'] as num?)?.toDouble(),
+      );
 
   final String id;
   final String branchName;
   final String branchCode;
   final double? latitude;
   final double? longitude;
+
+  /// The live `branches` table historically used branch_name; some ports rename it
+  /// to branch_name_as_k / branch_name_as_location. Read whichever is present so
+  /// "Add fence" tolerates a renamed column instead of 42703.
+  static String _branchNameOf(Map<String, dynamic> json) =>
+      '${_field(json, 'branch_name')}'
+      '${_field(json, 'branch_name_as_k')}'
+      '${_field(json, 'branch_name_as_location')}'
+      ?.trim() ??
+      'Branch';
+
+  static String _branchCodeOf(Map<String, dynamic> json) =>
+      '${_field(json, 'branch_code')}' ??
+      '${_field(json, 'branch_name_as_code')}' ??
+      '';
+
+  static String? _field(Map<String, dynamic> json, String key) =>
+      json[key]?.toString().isNotEmpty == true ? json[key]?.toString() : null;
+
 
   bool get hasCoordinates => latitude != null && longitude != null;
 
@@ -118,7 +138,7 @@ class GeofenceService {
   /// branch rendered here looks exactly like the same branch on the map.
   static const String _branchSelect =
       'id, branch_name, branch_code, latitude, longitude, geofence_radius, '
-      'geofence_active, location, branch_name_as_location';
+      'geofence_active, location';
 
   /// Branches with no canonical fence yet — the "Add fence" candidates.
   Future<List<BranchOption>> branchesWithoutFence(

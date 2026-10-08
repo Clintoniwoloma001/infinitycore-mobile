@@ -86,28 +86,49 @@ begin
 
       -- Insert using the 4-column conflict key (decision 1 — no narrower key).
       -- sync_status, source, source_detail set per requirement.
-      insert into public.employee_location_events (
-        employee_id, latitude, longitude, accuracy,
-        recorded_at, uploaded_at,
-        source, source_detail,
-        sync_status
+      insert into public.employee_location_history (
+        employee_id,
+        latitude,
+        longitude,
+        accuracy,
+        altitude,
+        speed,
+        heading,
+        recorded_at,
+        is_offline_record,
+        sync_status,
+        battery_level,
+        network_status,
+        source,
+        source_detail
       ) values (
         v_employee.id,
         v_lat,
         v_lng,
         coalesce((v_location ->> 'accuracy')::numeric, 0::numeric),
+        null::numeric,
+        null::numeric,
+        null::numeric,
         v_rec,
-        now(),
+        true,
+        'SYNCED',
+        coalesce((v_location ->> 'battery_level')::integer, null),
+        coalesce(v_location ->> 'network_status', null),
         coalesce(v_location ->> 'source', 'mobile_offline_queue'),
-        coalesce(v_location ->> 'source_detail', 'background_sync'),
-        'backfilled_offline'
+        coalesce(v_location ->> 'source_detail', 'background_sync')
       )
-      on conflict (employee_id, recorded_at, latitude, longitude) do nothing;
+      where not exists (
+        select 1
+        from public.employee_location_history
+        where employee_id = v_employee.id
+        and recorded_at = v_rec
+        and latitude = v_lat
+        and longitude = v_lng
+      );
 
-      if found then
+      if sql%rowcount = 1 then
         v_inserted := v_inserted + 1;
       else
-        -- Conflicts (duplicate) don't count as new inserts.
         v_skipped := v_skipped + 1;
       end if;
     end;

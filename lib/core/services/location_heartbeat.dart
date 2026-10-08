@@ -215,7 +215,7 @@ class LocationHeartbeat {
   Future<void> rebindTo(String userId) async {
     if (_boundUserId == userId) return;
     _boundUserId = userId;
-    await _writeQueue(const []);
+    await OfflineLocationQueue.instance.purgeOldSynced(); // SQLite-based; JSON _writeQueue removed
   }
 
   Future<void> stop() async {
