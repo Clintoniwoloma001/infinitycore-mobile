@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import 'dart:async';
+import '../../core/services/location_heartbeat.dart';
+
 import '../../core/services/auth_service.dart';
 import '../../core/security/role_guard.dart';
 import '../../core/services/mobile_session_service.dart';
@@ -149,6 +152,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               photoUrl: snapshot.photoUrl,
             ),
             const SizedBox(height: 12),
+            _TrackingStatusCard(snapshot: snapshot),
+            const SizedBox(height: 12),
             _TodayCard(snapshot: snapshot, onGoToTab: widget.onGoToTab),
             const SizedBox(height: 12),
             // The month the four cards below are reporting on. Placed directly
@@ -185,6 +190,78 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 12),
           _SecurityCard(snapshot: snapshot),
         ],
+      ),
+    );
+  }
+}
+
+/// Small status line: how many locations are waiting to upload, and when the
+/// last one was recorded. Drives the honest "is this device actually
+/// reporting" signal without claiming a live position that does not exist.
+class _TrackingStatusCard extends StatefulWidget {
+  const _TrackingStatusCard({required this.snapshot});
+
+  final dynamic snapshot;
+
+  @override
+  State<_TrackingStatusCard> createState() => _TrackingStatusCardState();
+}
+
+class _TrackingStatusCardState extends State<_TrackingStatusCard> {
+  int _pending = 0;
+  StreamSubscription? _sub;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_refresh());
+    LocationHeartbeat.instance.status.addListener(_onStatus);
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    super.dispose();
+  }
+
+  void _onStatus() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _refresh() async {
+    final pending = await LocationHeartbeat.instance.pendingCount();
+    if (mounted) setState(() => _pending = pending);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final status = LocationHeartbeat.instance.status.value;
+    final fresh = status.hasFreshFix;
+    final tone = fresh ? Colors.green : Colors.amber;
+    return Card(
+      elevation: 0,
+      shape: const StadiumBorder(),
+      child: ListTile(
+        leading: Icon(fresh ? Icons.cloud_done_outlined : Icons.cloud_upload_outlined,
+            color: tone),
+        title: Text(
+          _pending > 0
+              ? '$_pending location${_pending == 1 ? '' : 's'} waiting to upload'
+              : 'All locations uploaded',
+          style: Theme.of(context).textTheme.titleSmall,
+        ),
+        subtitle: Text(
+          status.note ?? status.summary,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant),
+        ),
+        trailing: TextButton(
+          onPressed: () {
+            unawaited(LocationHeartbeat.instance.syncPending());
+            unawaited(_refresh());
+          },
+          child: const Text('Sync now'),
+        ),
       ),
     );
   }
