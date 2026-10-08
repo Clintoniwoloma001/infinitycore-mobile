@@ -70,11 +70,13 @@ class LocationForegroundService : Service(), LocationListener {
         const val PREFS = "infinitycore_location_prefs"
         const val KEY_WAS_ACTIVE = "was_active"
 
-        // 15 minutes / 100 m. Deliberately not per-second: this is workforce
-        // telemetry, not turn-by-turn navigation, and the Dart heartbeat has
-        // always used a ~30 minute cadence.
+        // TIME-BASED cadence: one fix every 120 s whether or not the person has
+        // moved. The old minDistance=10 m gate suppressed fixes while a
+        // stationary employee was at a desk, which is exactly when an admin
+        // needs to know the person is still at the office. Distance is now 0.
+        // Interval is capped at 120 s per the tracking policy.
         private const val MIN_INTERVAL_MS = 2L * 60L * 1000L
-        private const val MIN_DISTANCE_M = 10f
+        private const val MIN_DISTANCE_M = 0f
 
         fun start(context: Context, token: String, supabaseUrl: String, rpcPath: String) {
             val intent = Intent(context, LocationForegroundService::class.java).apply {
