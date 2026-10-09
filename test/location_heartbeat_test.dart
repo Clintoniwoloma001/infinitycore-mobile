@@ -128,8 +128,13 @@ void main() {
       expect(source, contains('startSyncWatchdog'));
       // A failed drain must leave the queue alone.
       expect(source, contains('Queue untouched; retried on the next tick.'));
-      // Entries captured for a different account are still dropped.
-      expect(source, contains('Belongs to another account'));
+      // Entries captured for a different account are still dropped. The queue
+      // was moved to SQLite, so the discard now happens in rebindTo -> purge,
+      // but the invariant is unchanged: the previous employee's positions must
+      // never be attributed to whoever signed in afterwards.
+      expect(source, contains('rebindTo'));
+      expect(source, contains('purgeOldSynced'));
+      expect(source, contains('must never be attributed'));
     });
   });
 
@@ -206,10 +211,7 @@ void main() {
     test('signing out clears every permission immediately', () {
       final source = File(_permissionPath).readAsStringSync();
       expect(source, contains('stopRealtime()'));
-      expect(
-        source,
-        contains('no permission outlives the session'),
-      );
+      expect(source, contains('no permission outlives the session'));
     });
   });
 
@@ -304,12 +306,15 @@ void _sourceGuards() {
 
     test('one employee can never inherit another\'s queued positions', () {
       // Points captured while signed out are tagged and only released to the
-      // same account; rebinding discards the previous account's queue.
+      // same account; rebinding discards the previous account's queue. The
+      // queue now lives in SQLite, so the discard is rebindTo -> purge rather
+      // than a JSON rewrite, but the security invariant is identical.
       final heartbeat = File('lib/core/services/location_heartbeat.dart')
           .readAsStringSync();
       expect(heartbeat, contains('captured_for'));
       expect(heartbeat, contains('rebindTo'));
-      expect(heartbeat, contains('Belongs to another account'));
+      expect(heartbeat, contains('purgeOldSynced'));
+      expect(heartbeat, contains('must never be attributed'));
     });
   });
 }
