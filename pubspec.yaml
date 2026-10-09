@@ -31,7 +31,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # +20 carries: v3 single-source live positions (web + mobile parity), the
 # "Add-Fence Add Location" UX on both platforms, the NULL branch-name repair
 # pack, the 4-minute auto-sync watchdog fix, and the live coverage badge.
-version: 1.1.8+20
+version: 1.1.8+21
 
 environment:
   sdk: ^3.13.3
