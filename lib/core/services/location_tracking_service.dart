@@ -20,6 +20,16 @@
 // * It never attributes one employee's position to another. Points captured
 //   while signed out are held locally and only ever released to the SAME
 //   account that captured them.
+//
+// TRACKING IS ALWAYS ON WHILE SIGNED IN  (this rule supersedes all previous)
+// Continuous background tracking is a platform capability that runs for the
+// WHOLE authenticated session. It is deliberately NOT tied to attendance
+// state: clocking OUT does not stop it, and neither does an open or closed
+// attendance record. The only things that stop tracking are the ones listed
+// above - location switched off, no permission, a blocked account, or a
+// genuine sign-out on an unbound device. Any code that ever gates tracking on
+// the clock again contradicts this file's contract and is a bug (see
+// test/tracking_clock_independence_test.dart, which enforces this).
 import 'dart:async';
 import 'dart:io';
 
@@ -115,6 +125,12 @@ class LocationTrackingService with WidgetsBindingObserver {
   /// idempotent and this method is safe to call from a lifecycle callback, a
   /// login, and an app launch without ever producing a second timer or a
   /// duplicate upload.
+  ///
+  /// CLOCK-INDEPENDENT: this method intentionally does NOT read the employee's
+  /// attendance state. Tracking runs for the entire signed-in session and must
+  /// not stop when the person clocks out - clock-out is an attendance event,
+  /// not a tracking event. The gates below are authentication, account status,
+  /// location-services availability and permission only.
   Future<void> evaluate({String? reason}) async {
     if (_evaluating) return; // never re-enter from a notifyListeners cascade
     _evaluating = true;

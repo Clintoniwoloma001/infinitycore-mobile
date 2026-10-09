@@ -104,8 +104,11 @@ class _TrackingDisclosureScreenState extends State<TrackingDisclosureScreen> {
               Expanded(
                 child: ListView(
                   children: [
-                    Icon(Icons.location_on_outlined,
-                        size: 48, color: theme.colorScheme.primary),
+                    Icon(
+                      Icons.location_on_outlined,
+                      size: 48,
+                      color: theme.colorScheme.primary,
+                    ),
                     const SizedBox(height: 16),
                     Text(
                       TrackingDisclosure.body,
@@ -126,7 +129,11 @@ class _TrackingDisclosureScreenState extends State<TrackingDisclosureScreen> {
                     ? const SizedBox(
                         width: 20,
                         height: 20,
-                        child: SizedBox(width: 20, height: 20, child: const CircularProgressIndicator(strokeWidth: 2)),
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
                       )
                     : const Text('Allow tracking'),
               ),

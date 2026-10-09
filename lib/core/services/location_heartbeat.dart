@@ -27,7 +27,7 @@
 // Collection is NEVER silent. [explainAndRequest] shows the purpose first;
 // only then is the runtime permission asked for, and only the minimum needed.
 import 'dart:async';
-import 'dart:convert';
+import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -67,7 +67,16 @@ class LocationHeartbeat {
   /// An unbounded queue would grow forever on a device that stays offline.
   static const int maxQueue = 500;
 
-  static const _queueKey = 'infinitycore.location.queue.v1';
+  /// True when the NATIVE foreground service owns the 120 s capture cadence, so
+  /// the Dart side must NOT start a second periodic timer (invariant 4i).
+  ///
+  /// On Android the native [LocationForegroundService] keeps capturing even when
+  /// the app is backgrounded or killed, so it is the only reliable scheduler; a
+  /// Dart `Timer` is suspended there and running both would create double
+  /// clusters (two fixes within seconds). On iOS there is no native service, so
+  /// the Dart timer is the scheduler.
+  bool get _nativeOwnsCadence => Platform.isAndroid;
+
   static const _enabledKey = 'infinitycore.location.tracking.enabled';
 
   // Encrypted at rest: the offline queue holds precise employee coordinates.
@@ -84,11 +93,36 @@ class LocationHeartbeat {
   /// Drains the queue when connectivity returns.
   Timer? _syncTimer;
 
-  /// How often the queue is auto-drained WITHOUT any user tap. Four minutes:
-  /// frequent enough that the dashboard card is never more than one interval
-  /// stale, gentle enough not to hammer a radio that is still down (and the
-  /// drain itself is guarded by `_syncing`, so overlapping ticks collapse).
+  /// How often the queue is auto-drained WITHOUT any user tap while the queue
+  /// keeps failing to clear. Four minutes is the STEADY-STATE ceiling; a live
+  /// retry that is still failing backs off through [syncBackoffSchedule]
+  /// (30s → 60s → 120s, capped at 5 min) so a connection that returns is picked
+  /// up within seconds instead of waiting a fixed 4 minutes (invariant 4d).
   static const Duration _syncPollInterval = Duration(minutes: 4);
+
+  /// The exponential backoff ladder used between failed drain attempts
+  /// (invariant 4d): 30 s, 60 s, 120 s, then a 5-minute cap. A successful
+  /// drain resets the ladder back to 30 s, so a brief outage recovers fast.
+  static const List<Duration> syncBackoffSchedule = [
+    Duration(seconds: 30),
+    Duration(seconds: 60),
+    Duration(seconds: 120),
+    Duration(minutes: 5),
+  ];
+
+  /// Consecutive failed drain attempts. Drives which rung of
+  /// [syncBackoffSchedule] the next retry waits for; reset to 0 on success.
+  int _syncAttempt = 0;
+
+  /// The delay before the next drain: [syncBackoffSchedule][attempt], capped at
+  /// the 5-minute final rung. Pure so the schedule is unit-testable (T-i).
+  static Duration syncBackoffFor(int attempt) {
+    if (attempt <= 0) return syncBackoffSchedule.first;
+    final i = attempt >= syncBackoffSchedule.length
+        ? syncBackoffSchedule.length - 1
+        : attempt;
+    return syncBackoffSchedule[i];
+  }
 
   /// The account this device is bound to. Points captured while signed out are
   /// tagged with it and are only ever released to the SAME account, so a second
@@ -186,13 +220,26 @@ class LocationHeartbeat {
   /// an eligible employee with permission" - which
   /// [LocationTrackingService] decides - and not "did someone visit a card and
   /// press a button".
+  ///
+  /// EXACTLY ONE SCHEDULER PER PLATFORM (invariant 4i):
+  ///   * Android - the native foreground service owns the 120 s capture (a Dart
+  ///     timer is suspended once the app is backgrounded, so it cannot be the
+  ///     source of truth). The Dart side therefore does NOT start a periodic
+  ///     timer here; it only takes one immediate fix now and then flushes the
+  ///     queue. Starting a Dart timer as well would capture twice on the same
+  ///     cadence and produce double clusters (two fixes within seconds).
+  ///   * iOS / other - there is no native service, so the Dart timer is the
+  ///     scheduler and is started as before.
   Future<void> startAutomatic({String? boundUserId}) async {
     if (boundUserId != null) _boundUserId = boundUserId;
     if (_running && !_localOnly) return;
     _running = true;
     _localOnly = false;
+    _wireCapOverflowDiagnostic();
     unawaited(captureOnce());
-    _timer ??= Timer.periodic(interval, (_) => unawaited(captureOnce()));
+    if (!_nativeOwnsCadence) {
+      _timer ??= Timer.periodic(interval, (_) => unawaited(captureOnce()));
+    }
     // Anything captured while offline is drained as soon as a connection is
     // usable, without waiting for the next 2-minute capture window.
     startSyncWatchdog();
@@ -209,8 +256,24 @@ class LocationHeartbeat {
     if (_running && _localOnly) return;
     _running = true;
     _localOnly = true;
+    _wireCapOverflowDiagnostic();
     unawaited(captureOnce());
     _timer ??= Timer.periodic(interval, (_) => unawaited(captureOnce()));
+  }
+
+  /// Report a hard-cap overflow (rows the cap had to drop) server-side so it is
+  /// never a silent data loss (invariant 4f). Wired once here rather than in
+  /// the queue, because the queue is a storage primitive with no session and
+  /// the diagnostic belongs to the heartbeat that owns upload attribution.
+  void _wireCapOverflowDiagnostic() {
+    OfflineLocationQueue.onCapOverflow = (dropped) {
+      unawaited(
+        _reportDiagnostic(
+          'offline_queue_cap_overflow',
+          'Dropped $dropped oldest queue row(s) at the ${OfflineLocationQueue.maxRows} cap.',
+        ),
+      );
+    };
   }
 
   /// Point the device at a different account.
@@ -221,7 +284,8 @@ class LocationHeartbeat {
   Future<void> rebindTo(String userId) async {
     if (_boundUserId == userId) return;
     _boundUserId = userId;
-    await OfflineLocationQueue.instance.purgeOldSynced(); // SQLite-based; JSON _writeQueue removed
+    await OfflineLocationQueue.instance
+        .purgeOldSynced(); // SQLite-based; JSON _writeQueue removed
   }
 
   Future<void> stop() async {
@@ -314,7 +378,12 @@ class LocationHeartbeat {
         'captured_for': _boundUserId,
       };
 
-      // OFFLINE QUEUE (SQLite): ALWAYS insert first, before any upload attempt.
+      // OFFLINE QUEUE (SQLite): ALWAYS insert first, before any upload attempt
+      // (invariant 4a). The row MUST carry the fix's own timestamp, identical
+      // to what the direct upload below sends, so the server's dedupe key
+      // (employee_id, recorded_at, latitude, longitude) collapses this queued
+      // row and the fast-path upload into a single row, and every retry
+      // re-sends a byte-identical recorded_at (invariants 4b + 4h).
       await OfflineLocationQueue.instance.enqueue(
         latitude: position.latitude,
         longitude: position.longitude,
@@ -322,6 +391,7 @@ class LocationHeartbeat {
         batteryLevel: null, // battery_plus would provide this; kept null if plugin unavailable
         networkStatus: null,
         employeeId: _boundUserId,
+        recordedAt: position.timestamp,
       );
 
       // Signed out but still bound to an employee: hold the point on device
@@ -464,7 +534,9 @@ class LocationHeartbeat {
           timeLimit: Duration(seconds: 45),
         ),
       );
-    } catch (_) {/* fall through to coarse */}
+    } catch (_) {
+      /* fall through to coarse */
+    }
     try {
       return await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
@@ -472,32 +544,13 @@ class LocationHeartbeat {
           timeLimit: Duration(seconds: 30),
         ),
       );
-    } catch (_) {/* fall through to cache */}
+    } catch (_) {
+      /* fall through to cache */
+    }
     try {
       return await Geolocator.getLastKnownPosition();
     } catch (_) {
       return null;
-    }
-  }
-
-  Future<List<Map<String, dynamic>>> _readQueueLegacy() async {
-    try {
-      final raw = await _storage.read(key: _queueKey);
-      if (raw == null || raw.isEmpty) return [];
-      final decoded = jsonDecode(raw);
-      if (decoded is! List) return [];
-      return decoded.whereType<Map<String, dynamic>>().toList();
-    } catch (_) {
-      return [];
-    }
-  }
-
-  Future<void> _writeQueueLegacy(List<Map<String, dynamic>> items) async {
-    try {
-      await _storage.write(key: _queueKey, value: jsonEncode(items));
-      _pendingCount = items.length;
-    } catch (_) {
-      /* storage unavailable: drop rather than grow without bound */
     }
   }
 
@@ -519,36 +572,123 @@ class LocationHeartbeat {
   /// Anything tagged for a different account is dropped rather than uploaded:
   /// the previous employee's positions must never be attributed to whoever
   /// signed in afterwards.
-  /// Flush from SQLite queue: select unsynced, chunk 200, batch RPC, mark synced.
+  /// Flush from the SQLite queue: select unsynced oldest-first, send chunks of
+  /// at most 200 to `sync_offline_location_batch`, and mark a chunk synced ONLY
+  /// when the response confirms every row (invariant 4d).
+  ///
+  /// GUARDED (invariant 4g): a single `_syncing` flag means two callers racing
+  /// (a post-tick flush, a resume, a watchdog tick) collapse into one drain, so
+  /// each row is sent exactly once. Never throws: on any failure the chunk is
+  /// left unsynced with its attempts bumped, so the next attempt still has it.
   Future<void> _flushQueue() async {
-    final unsynced = await OfflineLocationQueue.instance.getUnsynced();
-    if (unsynced.isEmpty) {
-      _pendingCount = 0;
-      return;
-    }
-    // Chunk of 200 ordered by recorded_at.
-    final chunk = unsynced.take(200).toList();
-    final payload = chunk.map((row) => <String, dynamic>{
-      'latitude':  row['latitude'],
-      'longitude': row['longitude'],
-      'accuracy':  row['accuracy'],
-      'recorded_at': row['recorded_at'],
-      'battery_level': row['battery_level'],
-      'network_status': row['network_status'],
-      'source': 'mobile_offline_queue',
-      'source_detail': 'background_sync',
-    }).toList();
+    if (_syncing) return; // a drain is already running (invariant 4g)
+    _syncing = true;
     try {
-      final res = await SupabaseService.client.rpc('sync_offline_location_batch', params: {'p_locations': payload});
-      if (res is Map && res['status'] == 'synced') {
-        final syncedIds = chunk.map((r) => r['id'] as int).toList();
-        await OfflineLocationQueue.instance.markSynced(syncedIds);
-      } else {
-        // Leave untouched; retry on next tick.
-        await OfflineLocationQueue.instance.incrementAttempts(chunk.map((r) => r['id'] as int).toList());
+      // Quarantine poison rows FIRST so a permanently-failing fix can never
+      // block the rows behind it (invariant 4e), then report them.
+      await _quarantinePoison();
+
+      final unsynced = await OfflineLocationQueue.instance.getUnsynced();
+      if (unsynced.isEmpty) {
+        _pendingCount = 0;
+        return;
+      }
+      _pendingCount = unsynced.length;
+
+      // Chunks of at most 200, oldest-first (recorded_at ASC) - invariant 4d.
+      const chunkSize = 200;
+      for (var i = 0; i < unsynced.length; i += chunkSize) {
+        final chunk = unsynced.skip(i).take(chunkSize).toList();
+        final ok = await _sendChunk(chunk);
+        if (!ok) {
+          // Leave this and every later chunk unsynced for the next attempt; the
+          // backoff timer will retry. Never advance on a failed chunk, so order
+          // is preserved and nothing is silently skipped.
+          return;
+        }
       }
     } catch (_) {
-      // Failure: leave untouched for retry.
+      // Queue untouched; retried on the next tick.
+    } finally {
+      _syncing = false;
+    }
+  }
+
+  /// Send one chunk and reconcile the response.
+  ///
+  /// Returns true only when the server confirms the whole batch: `status` is
+  /// success AND `records_synced + records_skipped` equals the number sent
+  /// (invariant 4d). A partial or non-success response leaves every row in the
+  /// chunk unsynced with attempts bumped, so it is retried - never marked done.
+  Future<bool> _sendChunk(List<Map<String, dynamic>> chunk) async {
+    if (chunk.isEmpty) return true;
+    final ids = chunk.map((r) => r['id'] as int).toList();
+    final payload = chunk
+        .map(
+          (row) => <String, dynamic>{
+            'latitude': row['latitude'],
+            'longitude': row['longitude'],
+            'accuracy': row['accuracy'],
+            'recorded_at': row['recorded_at'],
+            'battery_level': row['battery_level'],
+            'network_status': row['network_status'],
+            'source': 'mobile_offline_queue',
+            'source_detail': 'background_sync',
+          },
+        )
+        .toList();
+    try {
+      final res = await SupabaseService.client.rpc(
+        'sync_offline_location_batch',
+        params: {'p_locations': payload},
+      );
+      if (res is Map && res['status'] == 'success') {
+        // A confirmation only counts if the server agrees it handled exactly
+        // what we sent. records_skipped (already present via dedupe) counts as
+        // confirmed, so a retried, deduped batch is not re-sent forever.
+        final synced = (res['records_synced'] as num?)?.toInt() ?? 0;
+        final skipped = (res['records_skipped'] as num?)?.toInt() ?? 0;
+        if (synced + skipped >= payload.length) {
+          await OfflineLocationQueue.instance.markSynced(ids);
+          return true;
+        }
+      }
+      // Not confirmed: leave the chunk unsynced and count the attempt.
+      await OfflineLocationQueue.instance.incrementAttempts(ids);
+      return false;
+    } catch (_) {
+      // Network/server failure: leave untouched, count the attempt, retry with
+      // backoff. A failed network call never loses or skips a fix (invariant
+      // 4a/4d).
+      await OfflineLocationQueue.instance.incrementAttempts(ids);
+      return false;
+    }
+  }
+
+  /// Move rows that have exhausted [maxAttempts] to the quarantined state and
+  /// report them through `record_tracking_diagnostic` so a poison row is
+  /// visible server-side and can never block later rows (invariant 4e).
+  Future<void> _quarantinePoison() async {
+    final poison = await OfflineLocationQueue.instance.poisonIds();
+    if (poison.isEmpty) return;
+    await OfflineLocationQueue.instance.quarantine(poison);
+    await _reportDiagnostic(
+      'queue_poison_quarantined',
+      'Quarantined ${poison.length} location row(s) after '
+          '${OfflineLocationQueue.maxAttempts} failed upload attempts.',
+    );
+  }
+
+  /// Fire-and-forget server diagnostic. Best-effort only: a diagnostic must
+  /// never itself break tracking, so every failure is swallowed.
+  Future<void> _reportDiagnostic(String code, String message) async {
+    try {
+      await SupabaseService.client.rpc(
+        'record_tracking_diagnostic',
+        params: {'p_code': code, 'p_message': message},
+      );
+    } catch (_) {
+      // Diagnostics are advisory; ignore any failure.
     }
   }
 
@@ -569,13 +709,25 @@ class LocationHeartbeat {
     if (_localOnly) return; // no session: nothing may be attributed
     if (_syncing) return; // a drain is already running
     _syncing = true;
+    var drained = true;
     try {
       await _flushQueue();
+      // If rows remain after the flush, this attempt failed and must back off;
+      // an empty queue means success and resets the ladder (invariant 4d).
+      drained = await OfflineLocationQueue.instance.getUnsynced().then(
+        (items) => items.isEmpty,
+      );
     } catch (_) {
+      drained = false;
       // Queue untouched; retried on the next tick.
     } finally {
       _syncing = false;
     }
+    // Advance the backoff ladder on failure, reset it on success, then arm the
+    // next retry at the resulting delay (invariant 4d). Wires _syncAttempt so
+    // the schedule is actually honoured rather than a fixed poll.
+    _syncAttempt = drained ? 0 : _syncAttempt + 1;
+    _rescheduleSync();
     // Publish a fresh status so the dashboard card reflects the drain that
     // JUST happened — no 30 s poll, no manual "Sync now" tap required.
     try {
@@ -604,18 +756,34 @@ class LocationHeartbeat {
   /// so the change stays deliverable as a Shorebird patch.
   void startSyncWatchdog() {
     _syncTimer?.cancel();
-    // The drain fires on schedule even when `_pendingCount` is stale
-    // (e.g. freshly launched with a queue written by the native service):
-    // syncPending() re-reads the queue itself, so an empty drain is a cheap
-    // no-op and a non-empty one uploads without any user tap.
-    _syncTimer = Timer.periodic(_syncPollInterval, (_) {
-      unawaited(syncPending());
-    });
+    // Arm the first drain. Subsequent drains reschedule themselves through
+    // _rescheduleSync() using the backoff ladder, so a failing queue backs off
+    // (30s→60s→120s→5min) while a healthy one returns to the steady-state poll.
+    _syncTimer = Timer(_syncPollInterval, _runSyncTick);
+  }
+
+  /// Run one drain, then arm the next at the delay implied by the current
+  /// backoff rung. Self-rescheduling rather than Timer.periodic so the interval
+  /// can change after every attempt (invariant 4d).
+  void _runSyncTick() {
+    unawaited(syncPending().whenComplete(_rescheduleSync));
+  }
+
+  /// Arm the next drain after [syncBackoffFor] picks the rung for the current
+  /// attempt count. A healthy queue (attempt 0) waits the steady-state poll; a
+  /// queue that keeps failing waits longer, capped at the 5-minute rung.
+  void _rescheduleSync() {
+    _syncTimer?.cancel();
+    final delay = _syncAttempt == 0
+        ? _syncPollInterval
+        : syncBackoffFor(_syncAttempt);
+    _syncTimer = Timer(delay, _runSyncTick);
   }
 
   void stopSyncWatchdog() {
     _syncTimer?.cancel();
     _syncTimer = null;
+    _syncAttempt = 0;
   }
 
   /// Observations waiting for a connection.

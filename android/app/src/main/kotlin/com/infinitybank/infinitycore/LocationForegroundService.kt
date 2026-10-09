@@ -257,25 +257,44 @@ class LocationForegroundService : Service(), LocationListener {
     // This matches the Dart-side queue (offline_location_queue.db, same schema).
     private fun enqueueToSqlite(location: Location, accuracy: Float?, battery: Float?, networkStatus: String?) {
         try {
+            // Invariant 4c: a physically impossible coordinate must never reach
+            // the queue - it would be indistinguishable from a real position.
+            val lat = location.latitude
+            val lng = location.longitude
+            if (lat.isNaN() || lng.isNaN() || lat < -90.0 || lat > 90.0 || lng < -180.0 || lng > 180.0) {
+                Log.w(TAG, "invalid coordinate dropped: ($lat, $lng)")
+                return
+            }
             val dbPath = getDatabasePath("offline_location_queue.db")
             val conn = SQLiteDatabase.openOrCreateDatabase(dbPath.absolutePath, null)
-            conn.execSQL("CREATE TABLE IF NOT EXISTS offline_location_queue (id INTEGER PRIMARY KEY AUTOINCREMENT, employee_id TEXT, latitude REAL, longitude REAL, accuracy REAL, battery_level REAL, network_status TEXT, recorded_at TEXT NOT NULL, is_synced INTEGER DEFAULT 0, attempts INTEGER DEFAULT 0)")
+            // Invariant 4a: WAL + a busy timeout so the Dart heartbeat (which
+            // opens the SAME file) and this service can both write without one
+            // side failing with SQLITE_BUSY and dropping a fix.
+            conn.execSQL("PRAGMA journal_mode = WAL")
+            conn.execSQL("PRAGMA busy_timeout = 5000")
+            // The schema MUST match the Dart queue exactly. `state` defaults to
+            // 'ok' and Dart's flush only selects state='ok' rows; without the
+            // column every native-queued row would be silently skipped on
+            // upload (a device that captured offline via the service would show
+            // zero rows arriving). IF NOT EXISTS keeps this safe on upgrade.
+            conn.execSQL("CREATE TABLE IF NOT EXISTS offline_location_queue (id INTEGER PRIMARY KEY AUTOINCREMENT, employee_id TEXT, latitude REAL, longitude REAL, accuracy REAL, battery_level REAL, network_status TEXT, recorded_at TEXT NOT NULL, is_synced INTEGER DEFAULT 0, attempts INTEGER DEFAULT 0, state TEXT DEFAULT 'ok')")
             conn.execSQL("CREATE INDEX IF NOT EXISTS idx_offline_unsynced ON offline_location_queue(is_synced, recorded_at ASC)")
             val nowIso = java.time.Instant.ofEpochMilli(System.currentTimeMillis())
                 .atZone(java.time.ZoneOffset.UTC).format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
             val employeeId = accessToken ?: ""  // best-effort; real attribution comes from auth.uid() on server
             val stmt = conn.compileStatement(
-                "INSERT INTO offline_location_queue (employee_id, latitude, longitude, accuracy, battery_level, network_status, recorded_at, is_synced, attempts) VALUES (?,?,?,?,?,?,?,?,?)"
+                "INSERT INTO offline_location_queue (employee_id, latitude, longitude, accuracy, battery_level, network_status, recorded_at, is_synced, attempts, state) VALUES (?,?,?,?,?,?,?,?,?,?)"
             )
             stmt.bindString(1, employeeId.takeIf { it.isNotBlank() } ?: "")
-            stmt.bindDouble(2, location.latitude)
-            stmt.bindDouble(3, location.longitude)
+            stmt.bindDouble(2, lat)
+            stmt.bindDouble(3, lng)
             stmt.bindDouble(4, accuracy?.toDouble() ?: 0.0)
             stmt.bindDouble(5, battery?.toDouble() ?: 0.0)
             stmt.bindString(6, networkStatus ?: "unknown")
             stmt.bindString(7, nowIso)
             stmt.bindLong(8, 0)  // is_synced = 0
             stmt.bindLong(9, 0)  // attempts = 0
+            stmt.bindString(10, "ok")  // state = 'ok' so Dart's flush picks it up
             stmt.executeInsert()
             stmt.close()
             conn.close()
