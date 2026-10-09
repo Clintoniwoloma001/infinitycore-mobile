@@ -6,7 +6,8 @@ import '../../core/services/supabase_service.dart';
 ///
 /// Reads the SAME server-authoritative RPCs as the web Command Centre:
 ///   * employee_tracking_access()   — may I read tracking at all?
-///   * employee_current_locations() — one live row per employee
+///   * employee_live_positions_v3() — one live row per employee (SAME RPC the
+///     web reads, so both apps render identical locations)
 ///   * employee_location_history()  — that employee's points for one day
 ///
 /// Every inside/outside verdict comes from `resolve_employee_location()` on the
@@ -37,23 +38,38 @@ class TrackingService {
   }
 
   /// Live positions, most recent first.
+  ///
+  /// Reads `employee_live_positions_v3` — the SAME RPC (same freshness
+  /// buckets, same `classify_geofence` verdict, same emulator exclusion) the
+  /// web Command Centre reads. A v2 fallback keeps older databases working;
+  /// v3-first ordering means identical data on both apps wherever deployed.
   Future<List<TrackedEmployee>> livePositions({
     int withinMinutes = 240,
   }) async {
-    final res = await SupabaseService.client.rpc(
-      'employee_current_locations',
-      params: {'p_within_minutes': withinMinutes},
-    );
-    if (res is Map && res['ok'] == false) {
-      throw TrackingException(
-        '${res['message'] ?? 'Unable to load live positions'}',
-      );
+    Map<String, dynamic>? denied;
+    for (final rpc in ['employee_live_positions_v3', 'employee_live_positions_v2']) {
+      try {
+        final res = await SupabaseService.client.rpc(
+          rpc,
+          params: {'p_within_minutes': withinMinutes},
+        );
+        if (res is Map && res['ok'] == false) {
+          denied = Map<String, dynamic>.from(res);
+          continue;
+        }
+        if (res is! List) return const [];
+        return res
+            .whereType<Map>()
+            .map((e) => TrackedEmployee.fromJson(Map<String, dynamic>.from(e)))
+            .toList(growable: false);
+      } catch (_) {
+        denied ??= {'message': 'Unable to load live positions'};
+        continue;
+      }
     }
-    if (res is! List) return const [];
-    return res
-        .whereType<Map>()
-        .map((e) => TrackedEmployee.fromJson(Map<String, dynamic>.from(e)))
-        .toList(growable: false);
+    throw TrackingException(
+      '${denied?['message'] ?? 'Unable to load live positions'}',
+    );
   }
 
   /// Movement history for one employee on one local day.
@@ -100,18 +116,34 @@ class TrackedEmployee {
     this.longitude,
   });
 
+  /// Null-safe text: null, blank, and the literal four characters "null"
+  /// (written by a stringifying client) all collapse to null so the caller
+  /// can fall back — and "null" can never render next to a branch name.
+  static String? _t(dynamic v) {
+    if (v == null) return null;
+    final text = v.toString().trim();
+    if (text.isEmpty || text.toLowerCase() == 'null') return null;
+    return text;
+  }
+
   factory TrackedEmployee.fromJson(Map<String, dynamic> j) => TrackedEmployee(
-    id: (j['employee_id'] ?? '').toString(),
-    name: (j['full_name'] ?? '—').toString(),
-    employeeNumber: (j['employee_number'] ?? '').toString(),
-    position: (j['position'] ?? '').toString(),
-    branchName: (j['branch_name'] ?? '').toString(),
-    insideGeofence: j['inside_geofence'] == true,
-    locationLabel: (j['location_label'] ?? '').toString(),
+    id: (_t(j['employee_id'] ?? j['id']) ?? '').toString(),
+    name: _t(j['full_name'] ?? j['employee_name'] ?? j['name']) ?? '—',
+    employeeNumber: (_t(j['employee_number']) ?? '').toString(),
+    position: (_t(j['position'] ?? j['role'] ?? j['designation']) ?? '').toString(),
+    branchName: (_t(j['branch_name'] ?? j['branch']) ?? '').toString(),
+    insideGeofence: j['inside_geofence'] == true ||
+        (j['geofence_status']?.toString().toLowerCase() == 'inside'),
+    locationLabel:
+        (_t(j['location_label'] ?? j['geofence_name']) ?? '').toString(),
     // The reverse-geocoded real place, present only once a client has looked it
     // up. Preferred for an OUTSIDE point; never used for an inside one.
-    resolvedPlace: (j['resolved_place'] ?? '').toString(),
-    minutesAgo: (j['minutes_ago'] as num?)?.toInt(),
+    resolvedPlace: (_t(j['resolved_place'] ?? j['nearest_location_name']) ?? '')
+        .toString(),
+    minutesAgo: (j['minutes_ago'] as num?)?.toInt() ??
+        (j['age_seconds'] is num
+            ? ((j['age_seconds'] as num) ~/ 60)
+            : null),
     latitude: (j['latitude'] as num?)?.toDouble(),
     longitude: (j['longitude'] as num?)?.toDouble(),
   );

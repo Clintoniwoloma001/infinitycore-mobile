@@ -209,23 +209,29 @@ class _TrackingStatusCard extends StatefulWidget {
 
 class _TrackingStatusCardState extends State<_TrackingStatusCard> {
   int _pending = 0;
-  StreamSubscription? _sub;
 
   @override
   void initState() {
     super.initState();
     unawaited(_refresh());
+    // Every heartbeat emission (capture, 4-minute auto-drain, GPS-miss)
+    // repaints the card the moment it happens — no 30 s poll needed.
     LocationHeartbeat.instance.status.addListener(_onStatus);
   }
 
   @override
   void dispose() {
-    _sub?.cancel();
+    LocationHeartbeat.instance.status.removeListener(_onStatus);
     super.dispose();
   }
 
   void _onStatus() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    // The emission already carries the fresh queue count — prefer it over a
+    // second async read so the card can never disagree with the heartbeat.
+    setState(() {
+      _pending = LocationHeartbeat.instance.status.value.pending;
+    });
   }
 
   Future<void> _refresh() async {
@@ -255,13 +261,9 @@ class _TrackingStatusCardState extends State<_TrackingStatusCard> {
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
-        trailing: TextButton(
-          onPressed: () {
-            unawaited(LocationHeartbeat.instance.syncPending());
-            unawaited(_refresh());
-          },
-          child: const Text('Sync now'),
-        ),
+        // Auto-sync is always on: LocationHeartbeat drains the offline queue
+        // every 4 minutes with no user tap, so this card never needs a manual
+        // sync trigger any more. [pending] is the single source of truth.
       ),
     );
   }

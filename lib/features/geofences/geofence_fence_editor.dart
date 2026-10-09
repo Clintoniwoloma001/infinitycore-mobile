@@ -201,15 +201,37 @@ class _FenceEditorScreenState extends State<FenceEditorScreen> {
           'Location permission is permanently denied. Enable it in Settings.',
         );
       }
-      final first = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          timeLimit: Duration(seconds: 15),
-        ),
-      );
+      Position first;
+      try {
+        first = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            timeLimit: Duration(seconds: 15),
+          ),
+        );
+      } catch (_) {
+        // A cold GNSS indoors can miss the 15 s window; the device's freshest
+        // cached fix still anchors the fence where the admin actually is, and
+        // the green pin keeps following live updates via the stream below.
+        final cached = await Geolocator.getLastKnownPosition();
+        if (cached == null) {
+          throw StateError(
+            'Could not get a GPS fix. Turn on location, or drag the pin manually.',
+          );
+        }
+        first = cached;
+      }
       if (!mounted) return;
       final fix = LatLng(first.latitude, first.longitude);
-      setState(() => _myPosition = fix);
+      // Pin the device fix as the green marker and anchor the fence circle on
+      // it, so the fence starts where the admin is and visibly encloses the
+      // branch. Moving the pin also re-centres the circle while the lock is
+      // on (the default locked state).
+      setState(() {
+        _myPosition = fix;
+        _placement.setLocked(true);
+        _placement.movePin(fix);
+      });
       try {
         _map.move(fix, _map.camera.zoom);
       } catch (_) {
@@ -489,6 +511,74 @@ class _FenceEditorScreenState extends State<FenceEditorScreen> {
                 ),
               ),
               const SizedBox(height: 14),
+              // Live GPS controls get their OWN row: a wide button or a long
+              // error message squeezed next to "Radius" would overflow the
+              // row (RenderFlex) and push the unit toggle off-screen. The
+              // error and coverage badge render below on full-width lines.
+              Row(
+                children: [
+                  if (_locatingMe)
+                    ...[
+                      OutlinedButton.icon(
+                        onPressed: _stopMyLocation,
+                        icon: const Icon(Icons.stop, size: 18, color: AppColors.rose),
+                        label: const Text('Stopping…', style: TextStyle(fontSize: 12)),
+                      ),
+                    ]
+                  else
+                    ...[
+                      // "Use My Location" pins the device fix as the green
+                      // marker and anchors the fence circle on it, so the
+                      // fence starts where the admin is.
+                      FilledButton.icon(
+                        onPressed: _useMyLocation,
+                        icon: const Icon(Icons.my_location, size: 18),
+                        label: const Text('Use My Location', style: TextStyle(fontSize: 12)),
+                      ),
+                      if (_myPosition != null) ...[
+                        const SizedBox(width: 4),
+                        OutlinedButton.icon(
+                          onPressed: _stopMyLocation,
+                          icon: const Icon(Icons.stop, size: 18, color: AppColors.rose),
+                          label: const Text('Stop', style: TextStyle(fontSize: 12)),
+                        ),
+                      ],
+                    ],
+                  const Spacer(),
+                ],
+              ),
+              if (_locationError != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  _locationError!,
+                  style: const TextStyle(fontSize: 11, color: AppColors.rose, height: 1.2),
+                ),
+              ],
+              if (_walkLocked && _myPosition != null) ...[
+                const SizedBox(height: 4),
+                // Live coverage badge: haversine distance from the fence
+                // centre to the green marker, so the admin sees at a glance
+                // whether the walk is inside or outside the fence.
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.green.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    _haversineMetres(_placement.circleCentre, _myPosition!) <= _radius
+                        ? 'Inside fence — ${_haversineMetres(_placement.circleCentre, _myPosition!).round()} m'
+                        : 'Outside fence — ${_haversineMetres(_placement.circleCentre, _myPosition!).round()} m',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: _haversineMetres(_placement.circleCentre, _myPosition!) <= _radius
+                          ? AppColors.green
+                          : AppColors.rose,
+                    ),
+                  ),
+                ),
+              ],
               Row(
                 children: [
                   Text(
@@ -499,26 +589,7 @@ class _FenceEditorScreenState extends State<FenceEditorScreen> {
                       color: AppColors.textSecondary(context),
                     ),
                   ),
-                  // --- GPS + tracking widget (inline, no broken reference) ---
-                  // Note: the interactive GPS controls are handled by the editor state;
-                  // this placeholder preserves the UI layout. See P0-C for full feature.
-                  const SizedBox(height: 4),
-                  if (_locationError != null) ...[
-                    const SizedBox(height: 4),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 2),
-                      child: Text(
-                        _locationError!,
-                        style: const TextStyle(fontSize: 11, color: AppColors.rose, height: 1.2),
-                      ),
-                    ),
-                  ],
-                  if (_walkLocked && _myPosition != null) ...[
-                    const SizedBox(height: 4),
-                    // Coverage badge (restored): live distance from pin to green marker.
-                    // See P0-C for full live badge with hysteresis and dashed line.
-                    Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: AppColors.green.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(6))),
-                  ],
+                  const Spacer(),
                   SegmentedButton<RadiusUnit>(
                     showSelectedIcon: false,
                     style: const ButtonStyle(
@@ -591,19 +662,31 @@ class _FenceEditorScreenState extends State<FenceEditorScreen> {
                     ),
                   ),
                   const SizedBox(width: 10),
-                  Expanded(
-                    child: FilledButton(
-                      onPressed: _canSave ? _save : null,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.green,
+                  if (_locatingMe || _myPosition != null)
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _stopMyLocation,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.rose,
+                          side: const BorderSide(color: AppColors.rose),
+                        ),
+                        child: const Text('Stop My Location'),
                       ),
-                      child: _saving
-                          ? const SizedBox(width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : Text(_isNew ? 'Add fence' : 'Save fence'),
+                    )
+                  else
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: _canSave ? _save : null,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppColors.green,
+                        ),
+                        child: _saving
+                            ? const SizedBox(width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                            : Text(_isNew ? 'Add fence' : 'Save fence'),
+                      ),
                     ),
-                  ),
                 ],
               ),
             ],

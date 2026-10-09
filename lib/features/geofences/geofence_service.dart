@@ -32,16 +32,19 @@ class BranchOption {
   /// The live `branches` table historically used branch_name; some ports rename it
   /// to branch_name_as_k / branch_name_as_location. Read whichever is present so
   /// "Add fence" tolerates a renamed column instead of 42703.
+  ///
+  /// NEVER string-interpolate a possibly-null value: `'${null}'` renders the
+  /// four-character word "null" on screen. Every candidate is checked for a
+  /// non-blank value BEFORE it is returned.
   static String _branchNameOf(Map<String, dynamic> json) =>
-      '${_field(json, 'branch_name')}'
-      '${_field(json, 'branch_name_as_k')}'
-      '${_field(json, 'branch_name_as_location')}'
-      ?.trim() ??
+      _field(json, 'branch_name') ??
+      _field(json, 'branch_name_as_k') ??
+      _field(json, 'branch_name_as_location') ??
       'Branch';
 
   static String _branchCodeOf(Map<String, dynamic> json) =>
-      '${_field(json, 'branch_code')}' ??
-      '${_field(json, 'branch_name_as_code')}' ??
+      _field(json, 'branch_code') ??
+      _field(json, 'branch_name_as_code') ??
       '';
 
   static String? _field(Map<String, dynamic> json, String key) =>

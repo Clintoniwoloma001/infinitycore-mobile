@@ -24,12 +24,14 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # authorization.
 # Sections 2, 4, 5 executive UI + Branch Performance 42702 fix + executive
 # role constraint + I-Meet audio signed-URL fix.
-# +13 continues from the active 1.1.2+12.
-# +16 is the Executive BI base release. It ADDS NATIVE PLUGINS, so it cannot be
-# a Shorebird patch and must ship through the App Store / Play Store. Once users
-# install 1.1.6+16, later Dart-only work (analytics, comboboxes, branch
-# attribution) can return to silent OTA patches (patch 17+).
-version: 1.1.8+19
+# +20 continues from the active 1.1.8+19. This changelog entry is intentionally
+# brief — the full fix list lives in the final report.
+# +19 carried: cross-platform RBAC single-source fix, 2-minute background
+# tracking with the offline queue and auto-sync, and SARA tool authorisation.
+# +20 carries: v3 single-source live positions (web + mobile parity), the
+# "Add-Fence Add Location" UX on both platforms, the NULL branch-name repair
+# pack, the 4-minute auto-sync watchdog fix, and the live coverage badge.
+version: 1.1.8+20
 
 environment:
   sdk: ^3.13.3

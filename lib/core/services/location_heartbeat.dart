@@ -84,10 +84,11 @@ class LocationHeartbeat {
   /// Drains the queue when connectivity returns.
   Timer? _syncTimer;
 
-  /// How often a non-empty queue is retried. Short enough that a restored
-  /// connection is picked up promptly, long enough not to hammer a radio that
-  /// is still down.
-  static const Duration _syncPollInterval = Duration(seconds: 30);
+  /// How often the queue is auto-drained WITHOUT any user tap. Four minutes:
+  /// frequent enough that the dashboard card is never more than one interval
+  /// stale, gentle enough not to hammer a radio that is still down (and the
+  /// drain itself is guarded by `_syncing`, so overlapping ticks collapse).
+  static const Duration _syncPollInterval = Duration(minutes: 4);
 
   /// The account this device is bound to. Points captured while signed out are
   /// tagged with it and are only ever released to the SAME account, so a second
@@ -170,7 +171,12 @@ class LocationHeartbeat {
     // Record one immediately so an admin does not wait a full interval to see
     // anything, then settle onto the requested cadence.
     unawaited(captureOnce());
+    // Auto-sync every 4 minutes regardless of whether the app was opened via
+    // start() (foreground, attendance) or startAutomatic() (authenticated
+    // employee). The watchdog drains the offline queue without any user tap.
     _timer = Timer.periodic(interval, (_) => unawaited(captureOnce()));
+    startSyncWatchdog();
+    unawaited(syncPending());
   }
 
   /// Start tracking for an authenticated, eligible employee.
@@ -273,12 +279,16 @@ class LocationHeartbeat {
       }
 
       final now = DateTime.now();
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          timeLimit: Duration(seconds: 20),
-        ),
-      );
+      final position = await _fixWithFallback();
+      if (position == null) {
+        // Nothing usable from any source. Say so honestly rather than
+        // implying a point was recorded; the next tick retries.
+        status.value = const HeartbeatStatus(
+          running: true,
+          note: 'Waiting for GPS — last fix kept, retrying automatically.',
+        );
+        return;
+      }
 
       // A fix that is too old is worse than no fix: an administrator would be
       // shown a position the device no longer holds.
@@ -332,19 +342,38 @@ class LocationHeartbeat {
       }
 
       final result = await _upload(observation);
+      // Re-read the queue BEFORE emitting: `_pendingCount` is otherwise one
+      // tick stale, which is how the card could claim "all uploaded" while
+      // rows were still on device (or vice versa).
+      int pendingNow = _pendingCount;
+      try {
+        final items = await OfflineLocationQueue.instance.getUnsynced();
+        pendingNow = items.length;
+        _pendingCount = pendingNow;
+      } catch (_) {
+        // Keep the last known count; the next flush corrects it.
+      }
       if (result == _UploadResult.ok) {
         status.value = HeartbeatStatus(
           running: true,
           lastRecordedAt: position.timestamp,
-          pending: _pendingCount,
+          pending: pendingNow,
         );
         unawaited(_flushQueue());
       } else if (result == _UploadResult.retry) {
         await _enqueue(observation);
+        int pendingAfter = pendingNow + 1;
+        try {
+          final items = await OfflineLocationQueue.instance.getUnsynced();
+          pendingAfter = items.length;
+          _pendingCount = pendingAfter;
+        } catch (_) {
+          _pendingCount = pendingAfter;
+        }
         status.value = HeartbeatStatus(
           running: true,
           lastRecordedAt: position.timestamp,
-          pending: _pendingCount,
+          pending: pendingAfter,
           note: 'No connection. The observation is saved and will be sent.',
         );
       } else {
@@ -361,7 +390,7 @@ class LocationHeartbeat {
     } catch (_) {
       status.value = const HeartbeatStatus(
         running: true,
-        note: 'Could not read a location fix this time.',
+        note: 'Waiting for GPS — last fix kept, retrying automatically.',
       );
     } finally {
       _inFlight = false;
@@ -408,6 +437,46 @@ class LocationHeartbeat {
       }
       // Everything else reads as "the network was not there".
       return _UploadResult.retry;
+    }
+  }
+
+  /// Best available fix for this tick, trying three sources in order.
+  ///
+  /// A single 20-second high-accuracy request is what the OS is GIVEN, not
+  /// what it can deliver: indoors or with a cold GNSS receiver the window
+  /// closes with no fix, the TimeoutException lands in the generic catch, and
+  /// the heartbeat reports "Waiting for GPS" forever even though the phone
+  /// happily serves network or cached locations (this is exactly how a day of
+  /// pings can vanish while clock-in — which retries on its own — keeps
+  /// working). So:
+  ///   1. Precise fix (45 s — a couple of missed 2-minute windows is better
+  ///      than an empty route, and `_inFlight` already prevents overlap).
+  ///   2. Coarse/network fix (30 s) — works where GPS-only times out.
+  ///   3. The device's freshest cached fix — accepted only if the caller's
+  ///      `maxFixAge` staleness guard below still passes, so a cached point
+  ///      can never be dressed up as live.
+  /// Returns null only when ALL THREE sources fail.
+  Future<Position?> _fixWithFallback() async {
+    try {
+      return await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 45),
+        ),
+      );
+    } catch (_) {/* fall through to coarse */}
+    try {
+      return await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.low,
+          timeLimit: Duration(seconds: 30),
+        ),
+      );
+    } catch (_) {/* fall through to cache */}
+    try {
+      return await Geolocator.getLastKnownPosition();
+    } catch (_) {
+      return null;
     }
   }
 
@@ -507,6 +576,21 @@ class LocationHeartbeat {
     } finally {
       _syncing = false;
     }
+    // Publish a fresh status so the dashboard card reflects the drain that
+    // JUST happened — no 30 s poll, no manual "Sync now" tap required.
+    try {
+      final items = await OfflineLocationQueue.instance.getUnsynced();
+      _pendingCount = items.length;
+      final current = status.value;
+      status.value = HeartbeatStatus(
+        running: current.running,
+        lastRecordedAt: current.lastRecordedAt,
+        pending: _pendingCount,
+        note: current.note,
+      );
+    } catch (_) {
+      // Status stays as-is; the next capture corrects it.
+    }
   }
 
   /// Start the bounded retry loop that drains the queue once a connection
@@ -520,8 +604,12 @@ class LocationHeartbeat {
   /// so the change stays deliverable as a Shorebird patch.
   void startSyncWatchdog() {
     _syncTimer?.cancel();
+    // The drain fires on schedule even when `_pendingCount` is stale
+    // (e.g. freshly launched with a queue written by the native service):
+    // syncPending() re-reads the queue itself, so an empty drain is a cheap
+    // no-op and a non-empty one uploads without any user tap.
     _syncTimer = Timer.periodic(_syncPollInterval, (_) {
-      if (_pendingCount > 0) unawaited(syncPending());
+      unawaited(syncPending());
     });
   }
 
