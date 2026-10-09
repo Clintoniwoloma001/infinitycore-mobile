@@ -41,6 +41,20 @@ class Env {
 
   static String get appName => 'InfinityCore';
 
+  /// Which AI model SARA is routed to (display pointer only).
+  /// The authoritative model is resolved SERVER-SIDE by aiRouter.ts
+  /// (OPENAI_MODEL function secret). The app never talks to the AI endpoint
+  /// directly — all SARA calls go through the `sara-chat` Edge Function — so
+  /// no base URL or auth token ever lives in this file or the app bundle.
+  /// Override with --dart-define="OPENAI_MODEL=Jarvis".
+  static String get aiModel {
+    const define = String.fromEnvironment('OPENAI_MODEL');
+    if (define.isNotEmpty) return define.trim();
+    return dotenv.env['OPENAI_MODEL']?.trim().isNotEmpty == true
+        ? dotenv.env['OPENAI_MODEL']!.trim()
+        : 'Jarvis';
+  }
+
   /// Public deployment origin used when encoding attendance-terminal QR codes.
   static String get terminalBaseUrl =>
       dotenv.env['TERMINAL_BASE_URL']?.trim().isNotEmpty == true

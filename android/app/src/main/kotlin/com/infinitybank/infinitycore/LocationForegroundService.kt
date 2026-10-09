@@ -131,6 +131,19 @@ class LocationForegroundService : Service(), LocationListener {
         getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().putBoolean(KEY_WAS_ACTIVE, true).apply()
 
+        // PERMISSION FIRST, FOREGROUND SECOND.
+        // On Android 14+ (API 34) calling startForeground() with
+        // FOREGROUND_SERVICE_TYPE_LOCATION while the app does NOT hold the
+        // runtime location grant throws a SecurityException and crashes the
+        // process. So we must confirm the grant BEFORE entering the foreground,
+        // never after. When it is missing we log tracking_unavailable, stop
+        // cleanly, and let the app re-prompt on next launch - we do NOT crash.
+        if (!hasPermission()) {
+            Log.w(TAG, "tracking_unavailable: location permission not granted")
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
         createChannel()
         startForegroundCompat()
 

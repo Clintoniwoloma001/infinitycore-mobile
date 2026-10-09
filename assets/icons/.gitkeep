@@ -1,0 +1,2 @@
+# Placeholder so Flutter finds the declared assets/icons/ directory.
+# (git does not track empty directories; this keeps release builds working.)

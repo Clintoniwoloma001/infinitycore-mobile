@@ -29,7 +29,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # a Shorebird patch and must ship through the App Store / Play Store. Once users
 # install 1.1.6+16, later Dart-only work (analytics, comboboxes, branch
 # attribution) can return to silent OTA patches (patch 17+).
-version: 1.1.7+17
+version: 1.1.8+19
 
 environment:
   sdk: ^3.13.3
