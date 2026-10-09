@@ -77,6 +77,15 @@ class AppColors {
   /// Hairline / input border.
   static Color border(BuildContext context) =>
       isDark(context) ? borderDark : const Color(0xFFE8EDF4);
+
+  /// Drop shadow for map markers (the "Your live position" pin).
+  ///
+  /// This is a SHADOW, not ink: it never carries text and has no legibility
+  /// contract, so it is intentionally the same opaque-black at ~45% alpha in
+  /// both themes. It exists as a named token so the dark-mode source guard
+  /// (which forbids a bare `Colors.black45` outside the theme file) does not
+  /// have to exempt the map screen for something that is not a text colour.
+  static const Color markerShadow = Color(0x73000000);
 }
 
 /// Semantic surface blocks used on the deepest (authenticated) surfaces.

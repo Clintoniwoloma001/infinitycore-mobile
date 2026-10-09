@@ -189,7 +189,7 @@ class _GeofenceCoverageTesterScreenState
       if (!mounted) return;
       setState(() {
         _locationError = error is StateError
-            ? '${error.message}'
+            ? error.message
             : friendlyGeofenceError(error);
       });
     } finally {
@@ -235,20 +235,15 @@ class _GeofenceCoverageTesterScreenState
 
   /// Full-screen, animated "you are covered" confirmation. Scale + fade in
   /// via the dialog transition builder — no extra animation code needed.
-  Future<void> _showSuccessDialog(
-    BranchGeofence fence,
-    CoverageCheck result,
-  ) {
+  Future<void> _showSuccessDialog(BranchGeofence fence, CoverageCheck result) {
     return showGeneralDialog<void>(
       context: context,
       barrierDismissible: true,
       barrierLabel: 'Close',
       barrierColor: const Color(0x66000000),
       transitionDuration: const Duration(milliseconds: 280),
-      pageBuilder: (ctx, _, _) => _CoverageSuccessDialog(
-        fence: fence,
-        result: result,
-      ),
+      pageBuilder: (ctx, _, _) =>
+          _CoverageSuccessDialog(fence: fence, result: result),
       transitionBuilder: (ctx, animation, _, child) => FadeTransition(
         opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
         child: ScaleTransition(
@@ -305,7 +300,7 @@ class _GeofenceCoverageTesterScreenState
         children: [
           Expanded(
             child: DropdownButtonFormField<BranchGeofence>(
-              value: _selected,
+              initialValue: _selected,
               isDense: true,
               decoration: const InputDecoration(
                 labelText: 'Branch fence',
@@ -388,7 +383,8 @@ class _GeofenceCoverageTesterScreenState
                 height: 44,
                 alignment: Alignment.center,
                 child: Semantics(
-                  label: 'Test point at ${point.latitude.toStringAsFixed(4)}, '
+                  label:
+                      'Test point at ${point.latitude.toStringAsFixed(4)}, '
                       '${point.longitude.toStringAsFixed(4)}',
                   child: const Icon(
                     Icons.location_pin,
@@ -540,9 +536,7 @@ class _GeofenceCoverageTesterScreenState
                       ),
                     )
                   : const Icon(Icons.radar, size: 18),
-              label: Text(
-                _checking ? 'Checking…' : 'Test my coverage',
-              ),
+              label: Text(_checking ? 'Checking…' : 'Test my coverage'),
             ),
           ),
         ],
@@ -558,7 +552,8 @@ class _GeofenceCoverageTesterScreenState
         tone: AppColors.amber,
         icon: Icons.info_outline,
         title: 'No fence for this branch',
-        body: '${fence.branchName} has no active fence, so clock-ins are not '
+        body:
+            '${fence.branchName} has no active fence, so clock-ins are not '
             'checked against a location.',
       );
     }
@@ -567,7 +562,8 @@ class _GeofenceCoverageTesterScreenState
         tone: AppColors.green,
         icon: Icons.check_circle_outline,
         title: 'Inside coverage',
-        body: 'The server measured ${result.distanceLabel} from the centre of '
+        body:
+            'The server measured ${result.distanceLabel} from the centre of '
             '${fence.branchName} — inside the ${fence.radiusLabel} fence.',
       );
     }
@@ -575,7 +571,8 @@ class _GeofenceCoverageTesterScreenState
       tone: AppColors.rose,
       icon: Icons.location_off_outlined,
       title: 'Outside coverage',
-      body: 'The server measured ${result.distanceLabel} from the centre of '
+      body:
+          'The server measured ${result.distanceLabel} from the centre of '
           '${fence.branchName} — ${result.outsideLabel} beyond the '
           '${fence.radiusLabel} fence.',
     );

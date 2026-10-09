@@ -123,9 +123,10 @@ class _FenceEditorScreenState extends State<FenceEditorScreen> {
   // -------------------------------------------------------------------------
 
   void _onSliderChanged(double value) {
-    final metres = value
-        .roundToDouble()
-        .clamp(kMinGeofenceRadiusMetres, kMaxGeofenceRadiusMetres);
+    final metres = value.roundToDouble().clamp(
+      kMinGeofenceRadiusMetres,
+      kMaxGeofenceRadiusMetres,
+    );
     setState(() {
       _radius = metres;
       _typedMetres = null;
@@ -169,8 +170,12 @@ class _FenceEditorScreenState extends State<FenceEditorScreen> {
     final lat2 = b.latitude * math.pi / 180;
     final dLat = (b.latitude - a.latitude) * math.pi / 180;
     final dLng = (b.longitude - a.longitude) * math.pi / 180;
-    final h = math.sin(dLat / 2) * math.sin(dLat / 2) +
-        math.cos(lat1) * math.cos(lat2) * math.sin(dLng / 2) * math.sin(dLng / 2);
+    final h =
+        math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(lat1) *
+            math.cos(lat2) *
+            math.sin(dLng / 2) *
+            math.sin(dLng / 2);
     return 2 * earth * math.asin(math.sqrt(h.clamp(0.0, 1.0)));
   }
 
@@ -238,18 +243,16 @@ class _FenceEditorScreenState extends State<FenceEditorScreen> {
         // Map not attached yet — the marker still renders once built.
       }
       await _positionWatch?.cancel();
-      _positionWatch = Geolocator.getPositionStream(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          distanceFilter: 5,
-        ),
-      ).listen(
-        (pos) {
-          if (!mounted) return;
-          setState(() => _myPosition = LatLng(pos.latitude, pos.longitude));
-        },
-        onError: (_) {},
-      );
+      _positionWatch =
+          Geolocator.getPositionStream(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.high,
+              distanceFilter: 5,
+            ),
+          ).listen((pos) {
+            if (!mounted) return;
+            setState(() => _myPosition = LatLng(pos.latitude, pos.longitude));
+          }, onError: (_) {});
     } on StateError catch (e) {
       if (!mounted) return;
       setState(() => _locationError = e.message);
@@ -270,18 +273,6 @@ class _FenceEditorScreenState extends State<FenceEditorScreen> {
       _myPosition = null;
       _walkLocked = false;
       _locationError = null;
-    });
-  }
-
-  /// Toggle "Lock Circle & Walk Coverage". Locking keeps the fence circle
-  /// anchored at the branch-centre pin while the green pin walks; the badge
-  /// below the map then reports the live inside/outside distance.
-  void _setWalkLocked(bool value) {
-    setState(() {
-      _walkLocked = value;
-      if (value && !_placement.locked) {
-        _placement.setLocked(true);
-      }
     });
   }
 
@@ -395,7 +386,8 @@ class _FenceEditorScreenState extends State<FenceEditorScreen> {
                 label: 'Fence centre pin',
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
-                  onPanUpdate: (d) => _dragBy(_placement.pin, d.delta, circle: false),
+                  onPanUpdate: (d) =>
+                      _dragBy(_placement.pin, d.delta, circle: false),
                   child: const _PinHandle(),
                 ),
               ),
@@ -416,7 +408,7 @@ class _FenceEditorScreenState extends State<FenceEditorScreen> {
                     size: 36,
                     color: AppColors.green,
                     shadows: <Shadow>[
-                      Shadow(color: Colors.black45, blurRadius: 5),
+                      Shadow(color: AppColors.markerShadow, blurRadius: 5),
                     ],
                   ),
                 ),
@@ -439,17 +431,10 @@ class _FenceEditorScreenState extends State<FenceEditorScreen> {
       child: SingleChildScrollView(
         child: Container(
           width: double.infinity,
-          padding: EdgeInsets.fromLTRB(
-            16,
-            14,
-            16,
-            16 + media.padding.bottom,
-          ),
+          padding: EdgeInsets.fromLTRB(16, 14, 16, 16 + media.padding.bottom),
           decoration: BoxDecoration(
             color: AppColors.surface(context),
-            borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(16),
-            ),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
             boxShadow: [
               BoxShadow(
                 color: AppColors.isDark(context)
@@ -479,8 +464,7 @@ class _FenceEditorScreenState extends State<FenceEditorScreen> {
                         ),
                         Text(
                           [
-                            if (widget.branchCode.isNotEmpty)
-                              widget.branchCode,
+                            if (widget.branchCode.isNotEmpty) widget.branchCode,
                             '${_placement.circleCentre.latitude.toStringAsFixed(6)}, '
                                 '${_placement.circleCentre.longitude.toStringAsFixed(6)}',
                           ].join(' · '),
@@ -517,33 +501,47 @@ class _FenceEditorScreenState extends State<FenceEditorScreen> {
               // error and coverage badge render below on full-width lines.
               Row(
                 children: [
-                  if (_locatingMe)
-                    ...[
+                  if (_locatingMe) ...[
+                    OutlinedButton.icon(
+                      onPressed: _stopMyLocation,
+                      icon: const Icon(
+                        Icons.stop,
+                        size: 18,
+                        color: AppColors.rose,
+                      ),
+                      label: const Text(
+                        'Stopping…',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ] else ...[
+                    // "Use My Location" pins the device fix as the green
+                    // marker and anchors the fence circle on it, so the
+                    // fence starts where the admin is.
+                    FilledButton.icon(
+                      onPressed: _useMyLocation,
+                      icon: const Icon(Icons.my_location, size: 18),
+                      label: const Text(
+                        'Use My Location',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                    if (_myPosition != null) ...[
+                      const SizedBox(width: 4),
                       OutlinedButton.icon(
                         onPressed: _stopMyLocation,
-                        icon: const Icon(Icons.stop, size: 18, color: AppColors.rose),
-                        label: const Text('Stopping…', style: TextStyle(fontSize: 12)),
-                      ),
-                    ]
-                  else
-                    ...[
-                      // "Use My Location" pins the device fix as the green
-                      // marker and anchors the fence circle on it, so the
-                      // fence starts where the admin is.
-                      FilledButton.icon(
-                        onPressed: _useMyLocation,
-                        icon: const Icon(Icons.my_location, size: 18),
-                        label: const Text('Use My Location', style: TextStyle(fontSize: 12)),
-                      ),
-                      if (_myPosition != null) ...[
-                        const SizedBox(width: 4),
-                        OutlinedButton.icon(
-                          onPressed: _stopMyLocation,
-                          icon: const Icon(Icons.stop, size: 18, color: AppColors.rose),
-                          label: const Text('Stop', style: TextStyle(fontSize: 12)),
+                        icon: const Icon(
+                          Icons.stop,
+                          size: 18,
+                          color: AppColors.rose,
                         ),
-                      ],
+                        label: const Text(
+                          'Stop',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ),
                     ],
+                  ],
                   const Spacer(),
                 ],
               ),
@@ -551,7 +549,11 @@ class _FenceEditorScreenState extends State<FenceEditorScreen> {
                 const SizedBox(height: 4),
                 Text(
                   _locationError!,
-                  style: const TextStyle(fontSize: 11, color: AppColors.rose, height: 1.2),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.rose,
+                    height: 1.2,
+                  ),
                 ),
               ],
               if (_walkLocked && _myPosition != null) ...[
@@ -560,19 +562,28 @@ class _FenceEditorScreenState extends State<FenceEditorScreen> {
                 // centre to the green marker, so the admin sees at a glance
                 // whether the walk is inside or outside the fence.
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.green.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    _haversineMetres(_placement.circleCentre, _myPosition!) <= _radius
+                    _haversineMetres(_placement.circleCentre, _myPosition!) <=
+                            _radius
                         ? 'Inside fence — ${_haversineMetres(_placement.circleCentre, _myPosition!).round()} m'
                         : 'Outside fence — ${_haversineMetres(_placement.circleCentre, _myPosition!).round()} m',
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color: _haversineMetres(_placement.circleCentre, _myPosition!) <= _radius
+                      color:
+                          _haversineMetres(
+                                _placement.circleCentre,
+                                _myPosition!,
+                              ) <=
+                              _radius
                           ? AppColors.green
                           : AppColors.rose,
                     ),
@@ -681,9 +692,14 @@ class _FenceEditorScreenState extends State<FenceEditorScreen> {
                           backgroundColor: AppColors.green,
                         ),
                         child: _saving
-                            ? const SizedBox(width: 18,
+                            ? const SizedBox(
+                                width: 18,
                                 height: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
                             : Text(_isNew ? 'Add fence' : 'Save fence'),
                       ),
                     ),
@@ -699,10 +715,7 @@ class _FenceEditorScreenState extends State<FenceEditorScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: shellAppBar(
-        context,
-        title: _isNew ? 'Add fence' : 'Edit fence',
-      ),
+      appBar: shellAppBar(context, title: _isNew ? 'Add fence' : 'Edit fence'),
       body: Column(
         children: [
           Expanded(child: _buildMap()),
@@ -772,10 +785,7 @@ class _PinHandle extends StatelessWidget {
         size: 40,
         color: AppColors.rose,
         shadows: [
-          Shadow(
-            color: Colors.black.withValues(alpha: 0.35),
-            blurRadius: 6,
-          ),
+          Shadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 6),
         ],
       ),
     );
@@ -797,13 +807,9 @@ class _CircleHandle extends StatelessWidget {
         color: AppColors.green,
         border: Border.all(color: Colors.white, width: 3),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
-            blurRadius: 5,
-          ),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 5),
         ],
       ),
     );
   }
 }
-
