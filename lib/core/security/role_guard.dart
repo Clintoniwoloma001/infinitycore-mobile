@@ -494,6 +494,33 @@ bool canManageAttendance(String role) => const [
   AppRoles.branchManager,
 ].contains(role);
 
+/// Staff Analytics — Super Admin, Head of HR, Head of E-Business and the
+/// executive family (MD/CEO, Chairman, Director).
+///
+/// Deliberately its OWN gate rather than a shared one with [canManageAttendance].
+/// Staff Analytics reads the same summary RPC, so it used to inherit that
+/// audience — but adding the E-Business and executive roles here would also have
+/// opened Attendance Management for them, which was never asked for and would
+/// silently widen who can edit attendance records. Two separate gates keeps the
+/// two decisions separate.
+///
+/// `hr_manager` is carried for the same rename-tolerance reason as
+/// [canManageGeofences]: it is the legacy spelling of Head of HR.
+bool canAccessStaffAnalytics(String role) => const [
+  AppRoles.superAdmin,
+  AppRoles.headOfHumanResources,
+  AppRoles.hrManager,
+  AppRoles.headOfEBusiness,
+  AppRoles.mdCeo,
+  AppRoles.chairman,
+  AppRoles.director,
+].contains(role);
+
+/// True when this role gets the mobile Employee Tracking + Geofences
+/// capabilities. Used by [visibleDestinations] so the menu agrees with the
+/// router and the auth gate.
+bool canAccessStaffAnalyticsRoute(String role) => canAccessStaffAnalytics(role);
+
 /// Employee Tracking — Super Admin, Head of HR and the executive family
 /// (MD/CEO, Chairman, Director) on mobile.
 ///
@@ -523,6 +550,7 @@ bool canAccessEmployeeTracking(String role) => const [
   AppRoles.superAdmin,
   AppRoles.headOfHumanResources,
   AppRoles.hrManager,
+  AppRoles.headOfEBusiness,
   AppRoles.mdCeo,
   AppRoles.chairman,
   AppRoles.director,
@@ -545,6 +573,10 @@ bool canManageGeofences(String role) => const [
   AppRoles.superAdmin,
   AppRoles.headOfHumanResources,
   AppRoles.hrManager,
+  AppRoles.headOfEBusiness,
+  AppRoles.mdCeo,
+  AppRoles.chairman,
+  AppRoles.director,
 ].contains(role);
 
 /// Communication Administration access.

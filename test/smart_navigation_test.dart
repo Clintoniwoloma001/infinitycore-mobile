@@ -232,11 +232,18 @@ void main() {
 
     // Geofence Settings & Management owns every branch fence, so it must not
     // fall through to a default `_ => true` either.
-    group('Geofence Settings is Super Admin / Head of HR only', () {
+    // Widened by 20261110000007: Head of E-Business and the executive family
+    // now share the attendance/tracking audience, mirroring
+    // `public.is_geofence_admin()` after the migration.
+    group('Geofence Settings is the fence-admin audience', () {
       for (final role in const [
         AppRoles.superAdmin,
         AppRoles.headOfHumanResources,
         AppRoles.hrManager,
+        AppRoles.headOfEBusiness,
+        AppRoles.mdCeo,
+        AppRoles.chairman,
+        AppRoles.director,
       ]) {
         test('$role may open it', () {
           expect(visibleFor(role), contains('geofences'));
@@ -250,9 +257,6 @@ void main() {
         AppRoles.areaManager,
         AppRoles.staff,
         AppRoles.customer,
-        AppRoles.director,
-        AppRoles.mdCeo,
-        AppRoles.chairman,
       ]) {
         test('$role may NOT open it', () {
           expect(visibleFor(role), isNot(contains('geofences')));

@@ -124,14 +124,20 @@ String? redirectDecision(AuthGateState auth, String loc, Uri uri) {
   }
 
   // Attendance management is role-gated (the server also enforces this).
-  // Staff analytics reads the same RPC, so it shares the same audience.
-  if ((loc == '/attendance-management' || loc == staffAnalyticsRoute) &&
-      !auth.canManageAttendanceRole) {
+  if (loc == '/attendance-management' && !auth.canManageAttendanceRole) {
     return '/home';
   }
 
-  // Employee Tracking is gated on a fixed five-role list (Super Admin, Head
-  // of HR, MD/CEO, Chairman, Director), which is STRICTER than the web: a
+  // Staff Analytics reads the same summary RPC but has its OWN, wider audience
+  // (adds Head of E-Business and the executive family). Sharing the attendance
+  // gate would have opened Attendance Management for those roles too, which
+  // was never asked for.
+  if (loc == staffAnalyticsRoute && !canAccessStaffAnalytics(auth.role)) {
+    return '/home';
+  }
+
+  // Employee Tracking is gated on a fixed role list (Super Admin, Head of HR,
+  // Head of E-Business, MD/CEO, Chairman, Director), STRICTER than the web: a
   // tracking GRANT issued on web deliberately does not open it here.
   // Redirecting rather than rendering a refusal screen, so the destination is
   // never mounted at all for anyone else. The server refuses the RPC regardless,
@@ -141,8 +147,9 @@ String? redirectDecision(AuthGateState auth, String loc, Uri uri) {
     return '/home';
   }
 
-  // Geofence Settings & Management is restricted to Super Admin / Head of HR,
-  // mirroring `public.is_geofence_admin()`. Hiding the nav entry is not the
+  // Geofence Settings & Management is restricted to Super Admin, Head of HR,
+  // Head of E-Business and the executive family, mirroring
+  // `public.is_geofence_admin()`. Hiding the nav entry is not the
   // control: an unauthorized user who deep-links here is redirected away before
   // any screen mounts and before any fence is read. The authoritative check
   // remains `require_geofence_admin()` inside every geofence RPC.

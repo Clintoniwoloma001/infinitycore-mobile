@@ -240,14 +240,17 @@ List<AppDestination> visibleDestinations() {
         (d) => switch (d.id) {
           'automation' => canViewAutomation(role),
           'branch-performance' => canOpenExecutiveWorkspace(role),
-          // Role-gated rather than department-gated, because the audience is
-          // every role allowed to manage attendance.
-          'staff-analytics' => canManageAttendance(role),
-          // A fixed five-role list (Super Admin, Head of HR, MD/CEO,
+          // Role-gated rather than department-gated. Own audience
+          // (Super Admin, Head of HR, Head of E-Business, MD/CEO, Chairman,
+          // Director) via canAccessStaffAnalytics - NOT canManageAttendance,
+          // which would also have opened Attendance Management for them.
+          'staff-analytics' => canAccessStaffAnalytics(role),
+          // Role list (Super Admin, Head of HR, Head of E-Business, MD/CEO,
           // Chairman, Director). Precise staff location is not DELEGATED on
           // mobile, so this is a role list and not the RPC's answer.
           'employee-tracking' => canAccessEmployeeTracking(role),
-          // Super Admin / Head of HR only, mirroring `is_geofence_admin()`.
+          // Same audience as Employee Tracking, mirroring
+          // `public.is_geofence_admin()`.
           'geofences' => canManageGeofences(role),
           _ => true,
         },

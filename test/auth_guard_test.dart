@@ -196,15 +196,22 @@ void main() {
       }
     });
 
-    test('geofence settings is restricted to Super Admin / Head of HR', () {
+    test('geofence settings is restricted to the fence-admin roles', () {
       // Same audience as /bound-devices and as the server's
       // `is_geofence_admin()`. `hr_manager` is the legacy spelling of the Head
       // of HR role and is accepted for the same rename-tolerance reason the
       // database helper accepts it.
+      // Widened by 20261110000007: Head of E-Business and the executive
+      // family (MD/CEO, Chairman, Director) now join Super Admin and Head of HR,
+      // matching `public.is_geofence_admin()` after the migration.
       for (final role in const [
         AppRoles.superAdmin,
         AppRoles.headOfHumanResources,
         AppRoles.hrManager,
+        AppRoles.headOfEBusiness,
+        AppRoles.mdCeo,
+        AppRoles.chairman,
+        AppRoles.director,
       ]) {
         expect(
           _decide(
@@ -220,7 +227,7 @@ void main() {
         AppRoles.branchManager,
         AppRoles.hrOfficer,
         AppRoles.admin,
-        AppRoles.director,
+        AppRoles.areaManager,
         AppRoles.customer,
       ]) {
         expect(
