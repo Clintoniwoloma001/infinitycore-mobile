@@ -112,7 +112,16 @@ class _SaraScreenState extends State<SaraScreen> {
       );
       if (mounted) {
         setState(() {
-          _messages.add(SaraMessage(role: 'assistant', content: result.reply));
+          // If the chain DEGRADED (the primary provider could not be reached
+          // and the internal rules engine answered), say so and say why. A
+          // correct-looking answer with no explanation hides a broken or
+          // misconfigured provider — which is exactly what made the original
+          // failure undiagnosable.
+          final notice = result.notice?.trim();
+          final content = (notice == null || notice.isEmpty)
+              ? result.reply
+              : '${result.reply}\n\n$notice';
+          _messages.add(SaraMessage(role: 'assistant', content: content));
           _busy = false;
         });
       }
