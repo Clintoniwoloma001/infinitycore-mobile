@@ -31,7 +31,32 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # +20 carries: v3 single-source live positions (web + mobile parity), the
 # "Add-Fence Add Location" UX on both platforms, the NULL branch-name repair
 # pack, the 4-minute auto-sync watchdog fix, and the live coverage badge.
-version: 1.1.8+21
+# +22 is a FULL RELEASE, not a patch, because its decisive fix is NATIVE and no
+# OTA patch can deliver it. +21 had removed the Dart capture timer on Android
+# and left the native foreground service as the only scheduler; that service
+# has NEVER uploaded successfully in any release because it sent the Supabase
+# USER TOKEN in the `apikey` header and the gateway answered 401 "Invalid API
+# key" (proof: all 1166 rows in employee_location_events are
+# source_detail='heartbeat', with zero 'foreground_service' rows). An Android
+# device therefore recorded one fix at process start and then nothing. The
+# employee in the report (Iwoloma Clinton, IMFB/26/0526) clocked in and out on
+# 2026-10-09 from the app while producing zero location events that day.
+#
+# +22 carries:
+#   * NATIVE (why this is a full release): the Android foreground service now
+#     sends the project publishable key in `apikey` and the user JWT in
+#     `Authorization`, so its direct uploads are accepted; the queue's
+#     employee_id no longer receives the access token.
+#   * Dart: the Android capture timer is restored but defers to the native
+#     service for any cycle in which that service is OBSERVED capturing, so
+#     Android can never again have zero schedulers and never double-captures.
+#   * Dart: the home screen's tracking pill, which reported "all uploaded" from
+#     the local queue while the server had received nothing, is removed.
+#   * Dart: the Add Fence editor's broken working tree repaired.
+# The Dart half of this list was ALSO delivered to the installed 1.1.8+21
+# binaries as Shorebird patches 708226 (android) and 708232 (ios), because a
+# patch is tied to its own release version and +20's patches never reach +21.
+version: 1.1.9+22
 
 environment:
   sdk: ^3.13.3
