@@ -78,7 +78,15 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 #      render object - the row failed to lay out and nothing after it painted.
 #      The buttons are now wrapped in Flexible(fit: loose): bounded, still
 #      shrunk to intrinsic width.
-version: 1.1.9+23
+#
+# +24 corrects the +23 APK build command. Installing that build crashed at
+# launch with "v7: Could not find 'libflutter.so'. Looked for: [armeabi-v7a,
+# armeabi], but only found: [arm64-v8a]": the reported Galaxy J4 (SM-J415F) is
+# a 32-bit armeabi-v7a device, and the +23 APK was built with
+# --target-platform android-arm64 only. Releases are built with the DEFAULT ABI
+# set (android-arm, android-arm64, android-x64) so every supported device gets
+# its libflutter.so. See scripts/release_smoke.sh and the release guard test.
+version: 1.1.9+24
 
 environment:
   sdk: ^3.13.3
