@@ -279,8 +279,17 @@ class LocationForegroundService : Service(), LocationListener {
             // Invariant 4a: WAL + a busy timeout so the Dart heartbeat (which
             // opens the SAME file) and this service can both write without one
             // side failing with SQLITE_BUSY and dropping a fix.
-            conn.execSQL("PRAGMA journal_mode = WAL")
-            conn.execSQL("PRAGMA busy_timeout = 5000")
+            //
+            // READING THE PRAGMA IS MANDATORY HERE. `PRAGMA journal_mode = WAL`
+            // RETURNS A ROW, and Android's SQLiteDatabase.execSQL() throws
+            // "Queries can be performed using SQLiteDatabase query or rawQuery
+            // methods only" for any statement that produces a result set. With
+            // execSQL every single call landed in the catch below and was
+            // logged as "insert failed", so the service NEVER queued a single
+            // offline fix. rawQuery accepts a returning statement; the cursor is
+            // closed immediately because only the side effect matters.
+            conn.rawQuery("PRAGMA journal_mode = WAL", null).use { }
+            conn.rawQuery("PRAGMA busy_timeout = 5000", null).use { }
             // The schema MUST match the Dart queue exactly. `state` defaults to
             // 'ok' and Dart's flush only selects state='ok' rows; without the
             // column every native-queued row would be silently skipped on
@@ -314,7 +323,16 @@ class LocationForegroundService : Service(), LocationListener {
             stmt.close()
             conn.close()
         } catch (e: Exception) {
-            Log.w(TAG, "offline queue sqlite insert failed: ${e.message}")
+            // Say WHICH step failed. This catch previously logged "insert
+            // failed" for every exception, which hid the real defect: the PRAGMA
+            // statements above were executed with execSQL and threw before the
+            // INSERT was ever prepared, so the message pointed at the wrong
+            // line for weeks.
+            val stage = when (e) {
+                is android.database.sqlite.SQLiteException -> "sqlite"
+                else -> "queue"
+            }
+            Log.w(TAG, "offline queue $stage failed: ${e.message}")
         }
     }
 

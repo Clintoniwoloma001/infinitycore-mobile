@@ -47,7 +47,10 @@ class OfflineLocationQueue {
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_offline_unsynced ON offline_location_queue(is_synced, recorded_at ASC)',
     );
-    await db.execute('PRAGMA journal_mode = WAL');
+    // READ the PRAGMA, never execute() it. `journal_mode = WAL` returns a row
+    // and Android's execSQL rejects statements with a result set, which is what
+    // made the whole queue unopenable on device (see _database).
+    await db.rawQuery('PRAGMA journal_mode = WAL');
     // Stamp the schema version so a future release can detect an older DB and
     // migrate it instead of dropping it (invariant 4a). sqflite persists this
     // as PRAGMA user_version.
@@ -91,8 +94,21 @@ class OfflineLocationQueue {
     // readers and a writer coexist; busy_timeout makes the other side wait a
     // few seconds for the lock instead of failing with SQLITE_BUSY and dropping
     // a fix. Both belong to invariant 4a (one file, shared safely).
-    await _db!.execute('PRAGMA journal_mode = WAL');
-    await _db!.execute('PRAGMA busy_timeout = 5000');
+    //
+    // WHY rawQuery AND NOT execute
+    // `PRAGMA journal_mode = WAL` RETURNS A ROW (the mode it switched to), and
+    // Android's SQLiteDatabase.execSQL() throws "Queries can be performed using
+    // SQLiteDatabase query or rawQuery methods only" for any statement that
+    // produces a result set. `execute()` maps to execSQL, so the whole database
+    // open aborted here, sqflite logged "during open, closing...", and the queue
+    // was UNUSABLE on every Android device: no observation was ever captured or
+    // queued, and the heartbeat's capture loop silently swallowed the failure
+    // and reported "Waiting for GPS". rawQuery accepts a returning statement.
+    // This is why offline tracking appeared never to start.
+    await _db!.rawQuery('PRAGMA journal_mode = WAL');
+    // busy_timeout returns no rows, but treat both pragmas the same way so a
+    // build that changes the return behaviour cannot reintroduce the failure.
+    await _db!.rawQuery('PRAGMA busy_timeout = 5000');
     return _db!;
   }
 

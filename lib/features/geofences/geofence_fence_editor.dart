@@ -494,57 +494,78 @@ class _FenceEditorScreenState extends State<FenceEditorScreen> {
                   color: AppColors.textTertiary(context),
                 ),
               ),
-              const SizedBox(height: 14),
-              // Live GPS controls get their OWN row: a wide button or a long
-              // error message squeezed next to "Radius" would overflow the
-              // row (RenderFlex) and push the unit toggle off-screen. The
-              // error and coverage badge render below on full-width lines.
-              Row(
-                children: [
-                  if (_locatingMe) ...[
-                    OutlinedButton.icon(
-                      onPressed: _stopMyLocation,
-                      icon: const Icon(
-                        Icons.stop,
-                        size: 18,
-                        color: AppColors.rose,
-                      ),
-                      label: const Text(
-                        'Stopping…',
-                        style: TextStyle(fontSize: 12),
-                      ),
-                    ),
-                  ] else ...[
-                    // "Use My Location" pins the device fix as the green
-                    // marker and anchors the fence circle on it, so the
-                    // fence starts where the admin is.
-                    FilledButton.icon(
-                      onPressed: _useMyLocation,
-                      icon: const Icon(Icons.my_location, size: 18),
-                      label: const Text(
-                        'Use My Location',
-                        style: TextStyle(fontSize: 12),
-                      ),
-                    ),
-                    if (_myPosition != null) ...[
-                      const SizedBox(width: 4),
-                      OutlinedButton.icon(
-                        onPressed: _stopMyLocation,
-                        icon: const Icon(
-                          Icons.stop,
-                          size: 18,
-                          color: AppColors.rose,
-                        ),
-                        label: const Text(
-                          'Stop',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                      ),
-                    ],
-                  ],
-                  const Spacer(),
-                ],
-              ),
+               const SizedBox(height: 14),
+               // Live GPS controls get their OWN row: a wide button or a long
+               // error message squeezed next to "Radius" would overflow the
+               // row (RenderFlex) and push the unit toggle off-screen. The
+               // error and coverage badge render below on full-width lines.
+               //
+               // WHY EVERY BUTTON HERE IS WRAPPED IN Flexible
+               // A Row gives non-flex children an UNBOUNDED width constraint,
+               // and a Material button laid out with infinite width asserts
+               // "BoxConstraints forces an infinite width" inside its shape's
+               // render object. The row then fails to lay out and nothing below
+               // it is painted. That is exactly why "Use My Location" was
+               // reported missing from Add Fence while the code was right: the
+               // button existed in the tree but the row crashed before it
+               // could be drawn. Flexible(fit: loose) bounds the button to the
+               // space actually left in the row, so it still shrinks to its own
+               // intrinsic width instead of stretching.
+               Row(
+                 children: [
+                   if (_locatingMe) ...[
+                     Flexible(
+                       fit: FlexFit.loose,
+                       child: OutlinedButton.icon(
+                         onPressed: _stopMyLocation,
+                         icon: const Icon(
+                           Icons.stop,
+                           size: 18,
+                           color: AppColors.rose,
+                         ),
+                         label: const Text(
+                           'Stopping…',
+                           style: TextStyle(fontSize: 12),
+                         ),
+                       ),
+                     ),
+                   ] else ...[
+                     // "Use My Location" pins the device fix as the green
+                     // marker and anchors the fence circle on it, so the
+                     // fence starts where the admin is.
+                     Flexible(
+                       fit: FlexFit.loose,
+                       child: FilledButton.icon(
+                         onPressed: _useMyLocation,
+                         icon: const Icon(Icons.my_location, size: 18),
+                         label: const Text(
+                           'Use My Location',
+                           style: TextStyle(fontSize: 12),
+                         ),
+                       ),
+                     ),
+                     if (_myPosition != null) ...[
+                       const SizedBox(width: 4),
+                       Flexible(
+                         fit: FlexFit.loose,
+                         child: OutlinedButton.icon(
+                           onPressed: _stopMyLocation,
+                           icon: const Icon(
+                             Icons.stop,
+                             size: 18,
+                             color: AppColors.rose,
+                           ),
+                           label: const Text(
+                             'Stop',
+                             style: TextStyle(fontSize: 12),
+                           ),
+                         ),
+                       ),
+                     ],
+                   ],
+                   const Spacer(),
+                 ],
+               ),
               if (_locationError != null) ...[
                 const SizedBox(height: 4),
                 Text(
