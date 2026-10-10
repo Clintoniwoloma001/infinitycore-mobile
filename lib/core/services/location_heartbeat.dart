@@ -68,14 +68,45 @@ class LocationHeartbeat {
   static const int maxQueue = 500;
 
   /// True when the NATIVE foreground service owns the 120 s capture cadence, so
-  /// the Dart side must NOT start a second periodic timer (invariant 4i).
+  /// the Dart side must NOT run a second periodic timer (invariant 4i).
   ///
   /// On Android the native [LocationForegroundService] keeps capturing even when
   /// the app is backgrounded or killed, so it is the only reliable scheduler; a
   /// Dart `Timer` is suspended there and running both would create double
   /// clusters (two fixes within seconds). On iOS there is no native service, so
   /// the Dart timer is the scheduler.
+  ///
+  /// THIS IS NOW A PREFERENCE, NOT AN ORDER - and that distinction is the fix
+  /// for the 1.1.8+21 regression. Treating it as an order removed the Dart
+  /// timer on Android entirely and handed Android's whole cadence to a native
+  /// upload path that has never once succeeded in a released build (every row
+  /// in employee_location_events is source_detail='heartbeat'; there is not a
+  /// single 'foreground_service' row, because the native service sent its
+  /// `apikey` header as the user JWT and the gateway answered 401 "Invalid API
+  /// key" on every attempt). The result was that an Android device sent one
+  /// fix at process start and then nothing at all: an employee could clock in
+  /// every day while Live Positions kept showing a days-old fix. See
+  /// [nativeIsCapturing], which turns the preference back into a decision made
+  /// from evidence rather than from an assumption.
   bool get _nativeOwnsCadence => Platform.isAndroid;
+
+  /// Whether the Android native foreground service has been OBSERVED capturing
+  /// inside the window the Dart fallback would consider "still covered".
+  ///
+  /// Evidence comes from the shared SQLite queue (see
+  /// [OfflineLocationQueue.nativeAuthoredRowsWithin]): the native service
+  /// enqueues with an empty employee_id, this process enqueues with the bound
+  /// user id. No shared counter or callback is needed, and nothing new has to
+  /// be added natively - so this works on the installed binary and on devices
+  /// that have never reported a fix.
+  Future<bool> nativeIsCapturing() async {
+    if (!_nativeOwnsCadence) return false;
+    // One full interval of grace: a native row recorded within the last
+    // cadence window means the native path is alive and covering the cadence.
+    return (await OfflineLocationQueue.instance.nativeAuthoredRowsWithin(
+      interval,
+    )).isNotEmpty;
+  }
 
   static const _enabledKey = 'infinitycore.location.tracking.enabled';
 
@@ -221,15 +252,20 @@ class LocationHeartbeat {
   /// [LocationTrackingService] decides - and not "did someone visit a card and
   /// press a button".
   ///
-  /// EXACTLY ONE SCHEDULER PER PLATFORM (invariant 4i):
-  ///   * Android - the native foreground service owns the 120 s capture (a Dart
-  ///     timer is suspended once the app is backgrounded, so it cannot be the
-  ///     source of truth). The Dart side therefore does NOT start a periodic
-  ///     timer here; it only takes one immediate fix now and then flushes the
-  ///     queue. Starting a Dart timer as well would capture twice on the same
-  ///     cadence and produce double clusters (two fixes within seconds).
-  ///   * iOS / other - there is no native service, so the Dart timer is the
-  ///     scheduler and is started as before.
+  /// EXACTLY ONE SCHEDULER PER PLATFORM (invariant 4i), decided from evidence:
+  ///   * Android - the native foreground service is PREFERRED as the 120 s
+  ///     scheduler, because a Dart timer is suspended once the app is
+  ///     backgrounded and the native service is not. But a preference is not a
+  ///     guarantee: if the native path is not actually capturing, the Dart
+  ///     timer takes the cadence back immediately (see [nativeIsCapturing]).
+  ///     Android therefore never has ZERO working schedulers again.
+  ///   * iOS / other - there is no native service, so the Dart timer is
+  ///     always the scheduler and is started as before.
+  ///
+  /// Running both would capture twice on the same cadence and produce double
+  /// clusters; running neither records nothing at all. Of those two failures the
+  /// second is far worse, so the Dart timer is always armed and defers only
+  /// while there is proof the native service is covering the cadence.
   Future<void> startAutomatic({String? boundUserId}) async {
     if (boundUserId != null) _boundUserId = boundUserId;
     if (_running && !_localOnly) return;
@@ -237,13 +273,32 @@ class LocationHeartbeat {
     _localOnly = false;
     _wireCapOverflowDiagnostic();
     unawaited(captureOnce());
-    if (!_nativeOwnsCadence) {
-      _timer ??= Timer.periodic(interval, (_) => unawaited(captureOnce()));
-    }
+    // ALWAYS armed, on every platform, including Android. Previously this was
+    // `if (!_nativeOwnsCadence)`, which deleted the Dart timer on Android.
+    _timer ??= Timer.periodic(interval, (_) => unawaited(_fallbackTick()));
     // Anything captured while offline is drained as soon as a connection is
     // usable, without waiting for the next 2-minute capture window.
     startSyncWatchdog();
     unawaited(syncPending());
+  }
+
+  /// One Dart cadence cycle that stands down when the native service is
+  /// demonstrably already capturing.
+  ///
+  /// This is what keeps invariant 4i without repeating the 1.1.8+21 failure: a
+  /// healthy native path suppresses the Dart capture (no double clusters), and
+  /// a silent or failing native path leaves the Dart capture running (no
+  /// missing observations). A queue read failure is treated as "not capturing",
+  /// because the Dart timer is the only thing that can still record a fix.
+  Future<void> _fallbackTick() async {
+    if (await nativeIsCapturing()) {
+      status.value = HeartbeatStatus(
+        running: true,
+        note: 'Native location service is recording.',
+      );
+      return;
+    }
+    await captureOnce();
   }
 
   /// Keep capturing on device, upload nothing.

@@ -161,6 +161,51 @@ class OfflineLocationQueue {
     return rows;
   }
 
+  /// Rows authored by the ANDROID NATIVE FOREGROUND SERVICE, whose recorded_at
+  /// is within [window] of now.
+  ///
+  /// WHY THIS EXISTS
+  /// The native service and this Dart heartbeat share ONE SQLite file, and the
+  /// native service cannot tell Dart whether its direct upload is working (it
+  /// reports nothing over the MethodChannel). Rows are therefore the only
+  /// observable signal, and they are unambiguous: the native service has no
+  /// employee id to attribute a fix to, so it binds an EMPTY employee_id
+  /// (LocationForegroundService.bindString(1, "")), while every row this
+  /// process enqueues carries the bound user id. "employee_id IS NULL OR = ''"
+  /// is consequently a reliable authorship marker, not a heuristic.
+  ///
+  /// WHAT IT IS USED FOR
+  /// Deciding whether the Dart side still has to own the capture cadence. The
+  /// Dart heartbeat is meant to be a FALLBACK scheduler for Android, not a
+  /// second one (invariant 4i), so it only captures a cycle when the native
+  /// service has not been seen capturing recently. That keeps the two paths
+  /// from producing double clusters without ever leaving Android with NO
+  /// working scheduler - which is what 1.1.8+21 did.
+  Future<List<Map<String, dynamic>>> nativeAuthoredRowsWithin(
+    Duration window, {
+    int limit = 1,
+  }) async {
+    try {
+      final db = await _database;
+      final cutoff = DateTime.now()
+          .toUtc()
+          .subtract(window)
+          .toIso8601String();
+      return await db.query(
+        'offline_location_queue',
+        columns: ['id', 'recorded_at'],
+        where: "(employee_id IS NULL OR employee_id = '') AND recorded_at >= ?",
+        whereArgs: [cutoff],
+        orderBy: 'recorded_at DESC',
+        limit: limit,
+      );
+    } catch (_) {
+      // An unreadable queue is treated as "no evidence the native service is
+      // capturing", so the Dart fallback keeps running. Never the reverse.
+      return const [];
+    }
+  }
+
   /// Move rows to the quarantined state so they stop being retried but are kept
   /// on disk for diagnosis. The caller reports them through
   /// record_tracking_diagnostic; the queue never deletes them silently

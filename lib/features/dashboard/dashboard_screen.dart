@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import 'dart:async';
-import '../../core/services/location_heartbeat.dart';
 
 import '../../core/services/auth_service.dart';
 import '../../core/security/role_guard.dart';
@@ -152,8 +151,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
               photoUrl: snapshot.photoUrl,
             ),
             const SizedBox(height: 12),
-            _TrackingStatusCard(snapshot: snapshot),
-            const SizedBox(height: 12),
+            // The tracking pill that used to sit here was REMOVED
+            // deliberately. Its number came from the local queue, so it
+            // asserted that the server had rows it had no knowledge of. While
+            // Android's native upload path was failing with 401, that pill was
+            // still reporting success - it contradicted the real service state
+            // and hid the very bug this release exists to fix. Tracking state
+            // is exposed through the heartbeat's own status stream and through
+            // diagnostics, not through a second, contradicting status message
+            // on the home screen. Permission onboarding is unaffected and
+            // still lives in the attendance flow.
             _TodayCard(snapshot: snapshot, onGoToTab: widget.onGoToTab),
             const SizedBox(height: 12),
             // The month the four cards below are reporting on. Placed directly
@@ -190,80 +197,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 12),
           _SecurityCard(snapshot: snapshot),
         ],
-      ),
-    );
-  }
-}
-
-/// Small status line: how many locations are waiting to upload, and when the
-/// last one was recorded. Drives the honest "is this device actually
-/// reporting" signal without claiming a live position that does not exist.
-class _TrackingStatusCard extends StatefulWidget {
-  const _TrackingStatusCard({required this.snapshot});
-
-  final dynamic snapshot;
-
-  @override
-  State<_TrackingStatusCard> createState() => _TrackingStatusCardState();
-}
-
-class _TrackingStatusCardState extends State<_TrackingStatusCard> {
-  int _pending = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    unawaited(_refresh());
-    // Every heartbeat emission (capture, 4-minute auto-drain, GPS-miss)
-    // repaints the card the moment it happens — no 30 s poll needed.
-    LocationHeartbeat.instance.status.addListener(_onStatus);
-  }
-
-  @override
-  void dispose() {
-    LocationHeartbeat.instance.status.removeListener(_onStatus);
-    super.dispose();
-  }
-
-  void _onStatus() {
-    if (!mounted) return;
-    // The emission already carries the fresh queue count — prefer it over a
-    // second async read so the card can never disagree with the heartbeat.
-    setState(() {
-      _pending = LocationHeartbeat.instance.status.value.pending;
-    });
-  }
-
-  Future<void> _refresh() async {
-    final pending = await LocationHeartbeat.instance.pendingCount();
-    if (mounted) setState(() => _pending = pending);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final status = LocationHeartbeat.instance.status.value;
-    final fresh = status.hasFreshFix;
-    final tone = fresh ? Colors.green : Colors.amber;
-    return Card(
-      elevation: 0,
-      shape: const StadiumBorder(),
-      child: ListTile(
-        leading: Icon(fresh ? Icons.cloud_done_outlined : Icons.cloud_upload_outlined,
-            color: tone),
-        title: Text(
-          _pending > 0
-              ? '$_pending location${_pending == 1 ? '' : 's'} waiting to upload'
-              : 'All locations uploaded',
-          style: Theme.of(context).textTheme.titleSmall,
-        ),
-        subtitle: Text(
-          status.note ?? status.summary,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant),
-        ),
-        // Auto-sync is always on: LocationHeartbeat drains the offline queue
-        // every 4 minutes with no user tap, so this card never needs a manual
-        // sync trigger any more. [pending] is the single source of truth.
       ),
     );
   }

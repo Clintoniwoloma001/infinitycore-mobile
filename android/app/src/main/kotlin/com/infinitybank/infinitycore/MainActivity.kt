@@ -34,12 +34,13 @@ class MainActivity : FlutterFragmentActivity() {
                         val supabaseUrl = call.argument<String>("supabaseUrl")
                         val rpcPath = call.argument<String>("rpcPath")
                             ?: "/rest/v1/rpc/record_employee_location"
+                        val anonKey = call.argument<String>("anonKey") ?: ""
                         if (token.isNullOrBlank() || supabaseUrl.isNullOrBlank()) {
                             // Never start a service that cannot attribute its
                             // own data; LocationTrackingService re-evaluates.
                             result.error("NO_SESSION", "Missing session for tracking", null)
                         } else {
-                            LocationForegroundService.start(this, token, supabaseUrl, rpcPath)
+                            LocationForegroundService.start(this, token, supabaseUrl, rpcPath, anonKey)
                             result.success(true)
                         }
                     }

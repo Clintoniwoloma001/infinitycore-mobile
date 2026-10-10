@@ -316,5 +316,101 @@ void _sourceGuards() {
       expect(heartbeat, contains('purgeOldSynced'));
       expect(heartbeat, contains('must never be attributed'));
     });
+
+    test('android never has zero schedulers (the 1.1.8+21 regression)', () {
+      // THE REGRESSION THIS LOCKS OUT
+      // 1.1.8+21 shipped `if (!_nativeOwnsCadence) _timer ??= ...` inside
+      // startAutomatic, which deleted the Dart periodic timer on Android and
+      // left the native foreground service as Android's ONLY scheduler. That
+      // native upload has never succeeded in any release - it sent the user
+      // JWT in the `apikey` header, so the gateway answered 401 "Invalid API
+      // key" on every attempt and employee_location_events contains zero rows
+      // with source_detail='foreground_service'. An employee therefore got one
+      // fix at process start and then nothing: they could clock in daily while
+      // Live Positions kept showing a days-old fix.
+      //
+      // The Dart timer must therefore be armed unconditionally, and the
+      // decision to stand down must come from evidence (a native-authored row
+      // in the shared queue), never from a platform assumption.
+      final heartbeat = File('lib/core/services/location_heartbeat.dart')
+          .readAsStringSync();
+      expect(
+        heartbeat,
+        isNot(contains('if (!_nativeOwnsCadence) {')),
+        reason: 'the Dart timer must never be suppressed by platform alone',
+      );
+      expect(
+        heartbeat,
+        contains('_timer ??= Timer.periodic(interval, (_) => unawaited(_fallbackTick()));'),
+        reason: 'the Dart fallback timer must be armed on every platform',
+      );
+      expect(
+        heartbeat,
+        contains('nativeIsCapturing'),
+        reason: 'standing down must be decided from observed native capture',
+      );
+    });
+
+    test('the native queue marker is a deterministic authorship signal', () {
+      // The fallback only decides from evidence, so the evidence has to be
+      // unambiguous. The native service binds an EMPTY employee_id (it has no
+      // employee to attribute a fix to) while this process writes the bound
+      // user id, so "empty or null" identifies a native-authored row.
+      final queue = File('lib/core/services/offline_location_queue.dart')
+          .readAsStringSync();
+      expect(queue, contains('nativeAuthoredRowsWithin'));
+      expect(
+        queue,
+        contains("(employee_id IS NULL OR employee_id = '')"),
+        reason: 'the native authorship marker must stay aligned with the '
+            'empty employee_id the native service writes',
+      );
+      final native = File(
+        'android/app/src/main/kotlin/com/infinitybank/infinitycore/'
+        'LocationForegroundService.kt',
+      ).readAsStringSync();
+      expect(native, contains('bindString(1, "")'));
+    });
+
+    test('the home screen shows no tracking-status message of its own', () {
+      // THE CARD THIS LOCKS OUT
+      // The dashboard once showed a green/amber pill reading "All locations
+      // uploaded" / "N locations waiting to upload". Its number came from the
+      // LOCAL queue, so it asserted that the server had rows it had no
+      // knowledge of. While Android's native upload path was failing with 401,
+      // that card was still reporting success - it contradicted the real
+      // service state and hid the very bug this release exists to fix.
+      // Tracking state is exposed through the heartbeat's own status stream
+      // and through diagnostics, not through a second, contradicting status
+      // message on the home screen.
+      final dashboard = File('lib/features/dashboard/dashboard_screen.dart')
+          .readAsStringSync();
+      expect(dashboard, isNot(contains('_TrackingStatusCard')));
+      expect(dashboard, isNot(contains('All locations uploaded')));
+      expect(dashboard, isNot(contains('waiting to upload')));
+      expect(
+        dashboard,
+        isNot(contains('LocationHeartbeat')),
+        reason: 'the dashboard must not read heartbeat state to render a '
+            'tracking claim of its own',
+      );
+    });
+
+    test('permission guidance survives the removals', () {
+      // Removing status chrome must not remove employee-facing permission
+      // help: attendance is the legitimate place to prompt, and an employee
+      // who has refused background location still needs to be told how to fix
+      // it. That guidance lives in the permission service and in the
+      // heartbeat's purpose message, both of which must stay.
+      expect(
+        File('lib/core/services/location_heartbeat.dart').existsSync(),
+        isTrue,
+      );
+      expect(
+        LocationHeartbeat.purposeMessage,
+        contains('location'),
+        reason: 'the pre-prompt disclosure must still exist',
+      );
+    });
   });
 }

@@ -219,11 +219,15 @@ class LocationTrackingService with WidgetsBindingObserver {
       final session = await SupabaseService.currentSession();
       final token = session?.accessToken;
       final url = Env.supabaseUrl ?? '';
+      final anonKey = Env.supabaseAnonKey ?? '';
       if (token == null || token.isEmpty || url.isEmpty) return;
       await _nativeChannel.invokeMethod<bool>('start', {
         'accessToken': token,
         'supabaseUrl': url,
         'rpcPath': '/rest/v1/rpc/record_employee_location',
+        // Native needs the PROJECT key for the `apikey` header; without it
+        // every direct upload is rejected with HTTP 401 on real devices.
+        'anonKey': anonKey,
       });
     } on PlatformException {
       // Missing session, or the channel is unavailable. The Dart heartbeat is

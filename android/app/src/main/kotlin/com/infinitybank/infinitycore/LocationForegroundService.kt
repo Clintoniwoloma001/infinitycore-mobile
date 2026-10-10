@@ -65,6 +65,7 @@ class LocationForegroundService : Service(), LocationListener {
         const val EXTRA_ACCESS_TOKEN = "access_token"
         const val EXTRA_SUPABASE_URL = "supabase_url"
         const val EXTRA_RPC_PATH = "rpc_path"
+        const val EXTRA_ANON_KEY = "anon_key"
 
         /** Prefs flag recording that the user was tracking before a reboot. */
         const val PREFS = "infinitycore_location_prefs"
@@ -78,12 +79,14 @@ class LocationForegroundService : Service(), LocationListener {
         private const val MIN_INTERVAL_MS = 2L * 60L * 1000L
         private const val MIN_DISTANCE_M = 0f
 
-        fun start(context: Context, token: String, supabaseUrl: String, rpcPath: String) {
+        fun start(context: Context, token: String, supabaseUrl: String,
+                rpcPath: String, anonKey: String) {
             val intent = Intent(context, LocationForegroundService::class.java).apply {
                 action = ACTION_START
                 putExtra(EXTRA_ACCESS_TOKEN, token)
                 putExtra(EXTRA_SUPABASE_URL, supabaseUrl)
                 putExtra(EXTRA_RPC_PATH, rpcPath)
+                putExtra(EXTRA_ANON_KEY, anonKey)
             }
             ContextCompat.startForegroundService(context, intent)
         }
@@ -102,6 +105,11 @@ class LocationForegroundService : Service(), LocationListener {
     private var accessToken: String? = null
     private var supabaseUrl: String? = null
     private var rpcPath: String? = null
+
+    // Supabase `apikey` PROJECT key (NOT the user JWT). Required by the REST
+    // gateway on every call; native previously reused the user token here and
+    // every direct upload was rejected with HTTP 401 on real devices.
+    private var anonKey: String? = null
     private var locationManager: LocationManager? = null
     private val io = Executors.newSingleThreadExecutor()
     private val uploading = AtomicBoolean(false)
@@ -118,6 +126,7 @@ class LocationForegroundService : Service(), LocationListener {
                 accessToken = intent?.getStringExtra(EXTRA_ACCESS_TOKEN)
                 supabaseUrl = intent?.getStringExtra(EXTRA_SUPABASE_URL)
                 rpcPath = intent?.getStringExtra(EXTRA_RPC_PATH)
+                anonKey = intent?.getStringExtra(EXTRA_ANON_KEY)
             }
         }
 
@@ -281,11 +290,17 @@ class LocationForegroundService : Service(), LocationListener {
             conn.execSQL("CREATE INDEX IF NOT EXISTS idx_offline_unsynced ON offline_location_queue(is_synced, recorded_at ASC)")
             val nowIso = java.time.Instant.ofEpochMilli(System.currentTimeMillis())
                 .atZone(java.time.ZoneOffset.UTC).format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
-            val employeeId = accessToken ?: ""  // best-effort; real attribution comes from auth.uid() on server
+            // NEVER persist the access token to disk: the SECURITY contract of
+            // this class forbids it, and the server attributes queued rows
+            // from the session (auth.uid()) when Dart flushes them, so the
+            // column only needs a non-null placeholder here.
             val stmt = conn.compileStatement(
                 "INSERT INTO offline_location_queue (employee_id, latitude, longitude, accuracy, battery_level, network_status, recorded_at, is_synced, attempts, state) VALUES (?,?,?,?,?,?,?,?,?,?)"
             )
-            stmt.bindString(1, employeeId.takeIf { it.isNotBlank() } ?: "")
+            // NEVER persist the access token to disk: the SECURITY contract above
+            // forbids it, and the server attributes rows from the session anyway
+            // (auth.uid()), so the column only needs a non-null placeholder here.
+            stmt.bindString(1, "")
             stmt.bindDouble(2, lat)
             stmt.bindDouble(3, lng)
             stmt.bindDouble(4, accuracy?.toDouble() ?: 0.0)
@@ -336,7 +351,9 @@ class LocationForegroundService : Service(), LocationListener {
             conn.connectTimeout = 20_000
             conn.readTimeout = 20_000
             conn.setRequestProperty("Content-Type", "application/json")
-            conn.setRequestProperty("apikey", token)
+            // `apikey` is the PROJECT (anon) key; `Authorization` is the user JWT.
+            // Sending the user token as the apikey is rejected with HTTP 401.
+            conn.setRequestProperty("apikey", anonKey ?: "")
             conn.setRequestProperty("Authorization", "Bearer $token")
             conn.outputStream.use { it.write(body.toByteArray(StandardCharsets.UTF_8)) }
             val code = conn.responseCode
