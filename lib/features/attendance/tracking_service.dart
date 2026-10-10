@@ -6,18 +6,22 @@ import '../../core/services/supabase_service.dart';
 ///
 /// Reads the SAME server-authoritative RPCs as the web Command Centre:
 ///   * employee_tracking_access()   — may I read tracking at all?
-///   * employee_live_positions_v3() — one live row per employee (SAME RPC the
-///     web reads, so both apps render identical locations)
+///   * employee_live_positions_v4() — employees with a fix in the last 48 h,
+///     ONE row per employee by MAX(recorded_at), every geofence column derived
+///     from that fix, ONE display_category per row, and already sorted
+///   * employee_live_positions_v3() — the previous RPC, kept for older
+///     databases that do not have v4 yet (see the fallback below)
 ///   * employee_location_history()  — that employee's points for one day
 ///
-/// Every inside/outside verdict comes from `resolve_employee_location()` on the
-/// server. Nothing here recomputes distance or decides whether a point is
-/// inside a fence, so mobile and web cannot disagree about where somebody is.
+/// Every inside/outside verdict comes from `classify_geofence()` on the server.
+/// Nothing here recomputes distance or decides whether a point is inside a
+/// fence, so mobile and web cannot disagree about where somebody is.
 ///
-/// Access: see `canAccessEmployeeTracking`. A tracking GRANT issued on web does
-/// not open this on mobile — Super Admin only, deliberately. The server still
-/// makes the real decision; this client only avoids offering an action the RPC
-/// would refuse.
+/// WHY v4 AND NOT v3: v3 returns EVERY employee, including the 224 who have
+/// never produced a fix, and it has no ORDER BY — which is why both apps used
+/// to open on an alphabetical wall of "No location yet" with the people who
+/// actually report buried at the bottom. v4 returns only employees who reported
+/// inside the window and sorts them live-first.
 class TrackingService {
   const TrackingService._();
 
@@ -37,31 +41,67 @@ class TrackingService {
     }
   }
 
-  /// Live positions, most recent first.
+  /// Live positions, live-first then newest, for employees with a fix in the
+  /// last 48 hours.
   ///
-  /// Reads `employee_live_positions_v3` — the SAME RPC (same freshness
-  /// buckets, same `classify_geofence` verdict, same emulator exclusion) the
-  /// web Command Centre reads. A v2 fallback keeps older databases working;
-  /// v3-first ordering means identical data on both apps wherever deployed.
+  /// Reads `employee_live_positions_v4` — the SAME RPC the web reads. It returns
+  /// `display_category` ('stale' | 'inside' | 'outside' | 'unconfigured') and
+  /// `boundary_ambiguous`, both computed server-side, so the phone counts its
+  /// chips, picks its badges and decides the low-accuracy note from the SAME
+  /// field the web does. The two apps can no longer disagree.
+  ///
+  /// `employee_live_positions_v3` is the fallback for a database that has not
+  /// had the v4 migration applied. v3 has no display_category and no ordering,
+  /// so in that case the client derives those two things itself — the derivation
+  /// is a compatibility path, never the primary one.
   Future<List<TrackedEmployee>> livePositions({
-    int withinMinutes = 240,
+    int recentHours = 48,
   }) async {
     Map<String, dynamic>? denied;
+
+    // v4 first: it carries display_category + the server's own ordering.
+    try {
+      final res = await SupabaseService.client.rpc(
+        'employee_live_positions_v4',
+        params: {'p_recent_hours': recentHours},
+      );
+      if (res is Map && res['ok'] == false) {
+        denied ??= Map<String, dynamic>.from(res);
+      } else if (res is List) {
+        final v4 = res
+            .whereType<Map>()
+            .map((e) => TrackedEmployee.fromJson(Map<String, dynamic>.from(e)))
+            .where((p) => p.hasFix)
+            // Already sorted by the server: live first, then newest, then name.
+            // Do NOT re-sort, so the phone matches the web row for row.
+            .toList(growable: false);
+        if (v4.isNotEmpty || res.isEmpty) return v4;
+      }
+    } catch (_) {
+      denied ??= {'message': 'Unable to load live positions'};
+    }
+
+    // v3 fallback for a database without v4.
     for (final rpc in ['employee_live_positions_v3', 'employee_live_positions_v2']) {
       try {
         final res = await SupabaseService.client.rpc(
           rpc,
-          params: {'p_within_minutes': withinMinutes},
+          params: {'p_within_minutes': recentHours * 60},
         );
         if (res is Map && res['ok'] == false) {
-          denied = Map<String, dynamic>.from(res);
+          denied ??= Map<String, dynamic>.from(res);
           continue;
         }
         if (res is! List) return const [];
-        return res
+        final rows = res
             .whereType<Map>()
             .map((e) => TrackedEmployee.fromJson(Map<String, dynamic>.from(e)))
-            .toList(growable: false);
+            // v3 returns everyone, so the "has a recent fix" filter is the
+            // client's job here; v4 does it in SQL.
+            .where((p) => p.hasFix)
+            .toList(growable: true);
+        rows.sort(displayOrder);
+        return rows.toList(growable: false);
       } catch (_) {
         denied ??= {'message': 'Unable to load live positions'};
         continue;
@@ -94,6 +134,48 @@ class TrackingService {
   }
 }
 
+/// The display categories, identical to the web's `DISPLAY_CATEGORY` and to the
+/// `display_category` values `employee_live_positions_v4` returns.
+const String kCategoryInside = 'inside';
+const String kCategoryOutside = 'outside';
+const String kCategoryStale = 'stale';
+const String kCategoryUnconfigured = 'unconfigured';
+
+/// How old a fix may be and still count as "live". Same number as
+/// `trackingFreshness.js` (FRESHNESS_SECONDS.DELAYED) and as v4's threshold.
+const int kStaleThresholdMinutes = 30;
+
+/// The categories an employee can be counted under. Mutually exclusive, and
+/// their sum equals the number of rows listed — the same invariant the web enforces.
+const List<String> kTrackedCategories = <String>[
+  kCategoryInside,
+  kCategoryOutside,
+  kCategoryStale,
+  kCategoryUnconfigured,
+];
+
+/// Sort for the v3 compatibility path only, where the server sends no ordering.
+///
+/// Ordering is the server's job (v4 does it in SQL and its rows must not be
+/// re-sorted), but a database still on v3 would otherwise render alphabetically
+/// again. Same order as v4: freshness rank, then newest, then name.
+int displayOrder(TrackedEmployee a, TrackedEmployee b) {
+  int rankOf(TrackedEmployee p) => switch (p.category) {
+        kCategoryOutside || kCategoryInside || kCategoryUnconfigured =>
+          (p.minutesAgo ?? 0) <= 6 ? 0 : 1,
+        _ => 2,
+      };
+  final byRank = rankOf(a).compareTo(rankOf(b));
+  if (byRank != 0) return byRank;
+  final at = a.recordedAt;
+  final bt = b.recordedAt;
+  if (at != null && bt != null) {
+    final byTime = bt.compareTo(at);
+    if (byTime != 0) return byTime;
+  }
+  return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+}
+
 class TrackingException implements Exception {
   final String message;
   const TrackingException(this.message);
@@ -114,6 +196,9 @@ class TrackedEmployee {
     required this.minutesAgo,
     this.latitude,
     this.longitude,
+    this.displayCategory,
+    this.boundaryAmbiguous = false,
+    this.recordedAt,
   });
 
   /// Null-safe text: null, blank, and the literal four characters "null"
@@ -146,6 +231,16 @@ class TrackedEmployee {
             : null),
     latitude: (j['latitude'] as num?)?.toDouble(),
     longitude: (j['longitude'] as num?)?.toDouble(),
+    // The server's single display category. Absent only on the v3 fallback, in
+    // which case `displayCategory` derives it (see below) so an older database
+    // still renders correctly.
+    displayCategory: _t(j['display_category']),
+    // TRUE only when the fix's GPS error circle straddles the fence boundary.
+    // Never changes the verdict; only decides whether the honest low-accuracy
+    // note is shown.
+    boundaryAmbiguous: j['boundary_ambiguous'] == true,
+    // When the row was captured. Used for the v3 fallback ordering only.
+    recordedAt: DateTime.tryParse((j['recorded_at'] ?? '').toString()),
   );
 
   final String id;
@@ -160,8 +255,47 @@ class TrackedEmployee {
   final double? latitude;
   final double? longitude;
 
+  /// The server's `display_category`, one of
+  /// 'stale' | 'inside' | 'outside' | 'unconfigured'.
+  final String? displayCategory;
+
+  /// Whether the fix's GPS error circle reaches across the fence boundary.
+  final bool boundaryAmbiguous;
+
+  /// Capture time, from the server. Null only when the row has no fix.
+  final DateTime? recordedAt;
+
+  /// Whether this employee has a fix at all. v4 guarantees it in SQL; the v3
+  /// fallback enforces it client-side.
+  bool get hasFix => recordedAt != null || (minutesAgo ?? 0) > 0;
+
   /// Older than this is not "live", and saying so is the entire point.
-  bool get isStale => (minutesAgo ?? 0) > 45;
+  ///
+  /// The threshold is the SERVER's: 30 minutes, the same one
+  /// `trackingFreshness.js` and `employee_live_positions_v4` use. This phone
+  /// used to use 45 minutes, so the same fix could be "live" on one client and
+  /// "stale" on the other — which is precisely the kind of disagreement the
+  /// shared RPC exists to prevent. The server's own `freshness` field wins when
+  /// present.
+  bool get isStale => category == kCategoryStale;
+
+  /// The ONE display category, server-first. Falls back to a derivation only for
+  /// the v3 compatibility path.
+  String get category {
+    final server = _t(displayCategory)?.toLowerCase();
+    if (server != null) return server;
+    if (!hasFix) return kCategoryStale;
+    if ((minutesAgo ?? 0) > kStaleThresholdMinutes) return kCategoryStale;
+    return insideGeofence ? kCategoryInside : kCategoryOutside;
+  }
+
+  /// Whether the low-accuracy note should be shown at all.
+  ///
+  /// True ONLY when the server says the fix is boundary-ambiguous. The old
+  /// client-side test was `accuracy > radius`, which is true for a 100 m fix
+  /// against a 20 m fence — and for a fix 11.7 km OUTSIDE it, where accuracy
+  /// cannot possibly change the verdict.
+  bool get isLowAccuracy => boundaryAmbiguous;
 
   /// Where this person actually is, for display.
   ///
