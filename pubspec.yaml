@@ -53,10 +53,32 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 #   * Dart: the home screen's tracking pill, which reported "all uploaded" from
 #     the local queue while the server had received nothing, is removed.
 #   * Dart: the Add Fence editor's broken working tree repaired.
-# The Dart half of this list was ALSO delivered to the installed 1.1.8+21
-# binaries as Shorebird patches 708226 (android) and 708232 (ios), because a
-# patch is tied to its own release version and +20's patches never reach +21.
-version: 1.1.9+22
+#
+# +23 is ALSO a full release, for two more defects found on the physical SM-J415F
+# running the installed +21 (logcat evidence):
+#
+#   1. THE OFFLINE QUEUE WAS UNOPENABLE ON EVERY ANDROID DEVICE.
+#      "DatabaseException(... Queries can be performed using SQLiteDatabase query
+#      or rawQuery methods only.) sql 'PRAGMA journal_mode = WAL' ... during
+#      open, closing..."  That PRAGMA RETURNS A ROW and Android's execSQL
+#      rejects statements with a result set, so Dart's openDatabase threw AND the
+#      native service threw at the same statement before its INSERT was even
+#      prepared. Nothing was ever captured, queued or uploaded offline, and the
+#      heartbeat swallowed the failure and reported "Waiting for GPS". This is
+#      why tracking appeared never to start at all. Both sides now READ the
+#      pragma via rawQuery. TRACKING IS ALWAYS ON: it runs for the whole
+#      authenticated session, queues offline with the fix's own recorded_at, and
+#      flushes in recorded_at order when connectivity returns, so the history
+#      appears in both the web and mobile employee tracking views.
+#
+#   2. "USE MY LOCATION" ON ADD FENCE WAS INVISIBLE.
+#      The button was in the widget tree, but the Row holding it passed a
+#      Material button an UNBOUNDED width, and a button laid out with infinite
+#      width throws "BoxConstraints forces an infinite width" inside its shape's
+#      render object - the row failed to lay out and nothing after it painted.
+#      The buttons are now wrapped in Flexible(fit: loose): bounded, still
+#      shrunk to intrinsic width.
+version: 1.1.9+23
 
 environment:
   sdk: ^3.13.3
