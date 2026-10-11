@@ -26,7 +26,7 @@ which reproduces the shipped artifact. For `1.1.9+24` that was confirmed by:
 
 | Version | Commit | Git tag | Shorebird release ID | Flutter | Build date | Artifact SHA-256 | Patches | Notes |
 |---|---|---|---|---|---|---|---|---|
-| 1.1.9+24 | `c18defa` | `release/v1.1.9+24` | 888750 | 3.47.6 (`c98f9e9a90`) | 2026-10-10 10:55 | universal APK `9e60b32712da5505d204fa1c1e2d345576578326e63a4565c16ef88e059a8f08` (93 083 072 B); AAB `6a499062145752b56c030ad7f380e81ed97b339c39a8e68b125e1e4b55b955e7`; IPA `49dbf6768c24e3da5b596fe259fd5d3fe6101b041dfcfb20ea01f1309b5b00b0` | #1 `708893` stable · #2 `710759` stable, **rolled back** · #3 `711061` stable | default ABI set (32-bit device crashed on arm64-only APK). Release source verified as above. |
+| 1.1.9+24 | `c18defa` | `release/v1.1.9+24` | 888750 | 3.47.6 (`c98f9e9a90`) | 2026-10-10 10:55 | universal APK `9e60b32712da5505d204fa1c1e2d345576578326e63a4565c16ef88e059a8f08` (93 083 072 B); AAB `6a499062145752b56c030ad7f380e81ed97b339c39a8e68b125e1e4b55b955e7`; IPA `49dbf6768c24e3da5b596fe259fd5d3fe6101b041dfcfb20ea01f1309b5b00b0` | #1 `708893` stable · #2 `710759` stable, **rolled back** · #3 `711061` stable · #4 `711514` stable | default ABI set (32-bit device crashed on arm64-only APK). Release source verified as above. |
 | 1.1.9+23 | `1b6e7c2` | — | 888742 | 3.47.6 | 2026-10-10 | not recorded | none | OTA-enabled full release (queue PRAGMA + Add Fence layout). |
 | 1.1.9+22 | `9355964` | — | 888690 | 3.47.6 | 2026-10-10 | not recorded | none | native apikey repair + Dart cadence fallback. |
 | 1.1.8+21 | `6cfdd62` | `v1.1.8+21` | 888564 | 3.47.6 | 2026-10-10 | not recorded | none | offline-queue guarantees + clock-independent tracking. Only other tag in the repo. |
@@ -46,8 +46,9 @@ the server. What is known:
 
 | Patch | Track | Source | Evidence |
 |---|---|---|---|
+| #4 `711514` | stable | `3cd776f` (Employee Tracking: 48 h window + four categories) | **Known.** Built from `88f4ae5` — the release commit `c18defa` plus the RELEASES.md/AGENTS.md docs commit, which touches no Dart — with the Employee Tracking diff and nothing else. `shorebird patch android --release-version=1.1.9+24 --dry-run` reported **"No issues detected"** (no native diff, no asset diff), the patch verified as applicable to the release, and it published to staging and was then promoted. Artifacts: arm 1 224 446 B, aarch64 1 218 148 B, x86_64 1 213 540 B (3 656 134 B total). Tag `patch/v1.1.9+24-4`. |
 | #3 `711061` | stable | `423024f` (role_guard gate change only) | **Known.** Built deliberately from the release commit `c18defa` plus the `lib/core/security/role_guard.dart` diff of `423024f` and nothing else, so the patch carries only that change. |
-| #1 `708893` | stable | UNVERIFIED | No creation time available. |
+| #1 `708893` | stable | UNVERIFIED | No creation time available. Its artifacts total 3 639 791 B (1 213 533 B per ABI) — the same size class as #4's 3 656 134 B, which carries the whole Employee Tracking view, so #1 is consistent with carrying that view's earlier rewrite, but that is inference, not proof. |
 | #2 `710759` | stable, rolled back | UNVERIFIED | No creation time available. Cannot be deleted — Shorebird has no delete operation; it is inert because it is rolled back. |
 
 A shorebird patch is a **Dart-only** diff against the base release. Native code
@@ -61,6 +62,7 @@ branch and was deliberately **not** merged into `main`:
 
 | Branch | Commits ahead of main | What it is |
 |---|---|---|
+| `fix/employee-tracking-48h-window` | 1 (`3cd776f`) | shipped as Shorebird patch #4 (`711514`) on 1.1.9+24: Employee Tracking lists only employees with a fix inside the last 48 h, across the Inside / Outside / Stale / No geofence tabs. |
 | `release/1.1.7-offline-queue` | 3 (`a501c26`, `6ac4617`, `423024f`) | Employee Tracking reading the same source as web; mobile reporting the same reason as web; widened Staff Analytics / Employee Tracking / Geofences. |
 | `feat/director-intelligence-mobile` | 1 (`a501c26`) | the tracking-source change above. |
 | `fix/messages-visibility` | 0 | already contained in the release history; its worktree holds an uncommitted edit to `lib/features/messages/messages_screen.dart` belonging to another agent. |
