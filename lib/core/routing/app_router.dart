@@ -7,6 +7,7 @@ import '../services/auth_service.dart';
 import 'auth_gate.dart';
 import '../../features/auth/activation_screen.dart';
 import '../../features/auth/blocked_screen.dart';
+import '../../features/auth/create_account_screen.dart';
 import '../../features/auth/lock_screen.dart';
 import '../../features/auth/login_screen.dart';
 import '../../features/admin/bound_devices_screen.dart';
@@ -48,6 +49,12 @@ final GoRouter appRouter = GoRouter(
   routes: [
     GoRoute(path: '/splash', builder: (_, _) => const SplashScreen()),
     GoRoute(path: '/login', builder: (_, _) => const LoginScreen()),
+    // Create account — the mobile mirror of the web sign-up mode. Public like
+    // /login and /activate-account (see `publicRoutes` in auth_gate.dart).
+    GoRoute(
+      path: '/create-account',
+      builder: (_, _) => const CreateAccountScreen(),
+    ),
     GoRoute(
       path: '/activate-account',
       builder: (_, _) => const ActivationScreen(),

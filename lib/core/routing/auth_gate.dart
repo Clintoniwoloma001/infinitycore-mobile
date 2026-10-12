@@ -39,6 +39,7 @@ abstract class AuthGateState {
 /// Routes reachable without a resolved session.
 const List<String> publicRoutes = <String>[
   '/login',
+  '/create-account',
   '/activate-account',
   '/certificate-verify',
 ];

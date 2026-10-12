@@ -109,7 +109,7 @@ class _LoginScreenState extends State<LoginScreen> {
     }
     if (raw.contains('email_not_confirmed')) {
       return 'This account has not been activated yet. '
-          'Please use "Activate account" first.';
+          'Please use "Create account" first.';
     }
     if (raw.contains('too_many_requests') ||
         raw.contains('rate_limit') ||
@@ -258,8 +258,8 @@ class _LoginScreenState extends State<LoginScreen> {
                               child: const Text('Forgot password?'),
                             ),
                             TextButton(
-                              onPressed: () => context.go('/activate-account'),
-                              child: const Text('Activate account'),
+                              onPressed: () => context.go('/create-account'),
+                              child: const Text('Create account'),
                             ),
                           ],
                         ),
