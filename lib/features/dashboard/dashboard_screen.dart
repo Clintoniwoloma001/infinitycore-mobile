@@ -10,7 +10,9 @@ import '../../shared/models/models.dart';
 import '../../shared/utils/formatters.dart';
 import '../../shared/widgets/attendance_history_card.dart';
 import '../../shared/widgets/common.dart';
+import '../messages/create_sheets.dart';
 import 'dashboard_service.dart';
+import 'host_fab.dart';
 
 /// Calendar-month selection shared by the staff dashboard's metric cards and
 /// its month chips.
@@ -133,71 +135,92 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
     }
 
-    return RefreshIndicator(
-      onRefresh: () => _load(),
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(
-          parent: ClampingScrollPhysics(),
+    // Home's own compose action, published into the shell's FAB slot exactly
+    // like the Messages tab's (the publisher itself paints nothing). Home
+    // offers the same staff picker, so a direct message is one tap from the
+    // first screen — and, with per-tab slots, Home no longer inherits the
+    // Messages tab's channel button.
+    return Column(
+      children: [
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: () => _load(),
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(
+                parent: ClampingScrollPhysics(),
+              ),
+              padding: const EdgeInsets.all(16),
+              children: [
+                _Greeting(snapshot: snapshot, onGoToTab: widget.onGoToTab),
+                const SizedBox(height: 12),
+                if (snapshot.employee == null)
+                  const _NoEmployeeCard()
+                else ...[
+                  _EmployeeCard(
+                    employee: snapshot.employee!,
+                    photoUrl: snapshot.photoUrl,
+                  ),
+                  const SizedBox(height: 12),
+                  // The tracking pill that used to sit here was REMOVED
+                  // deliberately. Its number came from the local queue, so it
+                  // asserted that the server had rows it had no knowledge of. While
+                  // Android's native upload path was failing with 401, that pill
+                  // was still reporting success - it contradicted the real service
+                  // state and hid the very bug this release exists to fix. Tracking
+                  // state is exposed through the heartbeat's own status stream and
+                  // through diagnostics, not through a second, contradicting status
+                  // message on the home screen. Permission onboarding is unaffected
+                  // and still lives in the attendance flow.
+                  _TodayCard(snapshot: snapshot, onGoToTab: widget.onGoToTab),
+                  const SizedBox(height: 12),
+                  // The month the four cards below are reporting on. Placed directly
+                  // above them so the reader never sees a figure without knowing
+                  // which month it belongs to.
+                  _MonthFilter(
+                    months: DashboardMonthFilter.options(DateTime.now()),
+                    selected: _effectiveMonth,
+                    onChanged: (m) => setState(() => _month = m),
+                  ),
+                  const SizedBox(height: 12),
+                  _MetricsGrid(
+                    metrics: DashboardMetrics.fromRecords(
+                      snapshot.recentAttendance,
+                      month: _effectiveMonth,
+                    ),
+                    month: _effectiveMonth,
+                  ),
+                  if (widget.onGoToManagement != null) ...[
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: widget.onGoToManagement,
+                      icon: const Icon(Icons.groups_outlined),
+                      label: const Text('Manage team attendance'),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  // The Messages card that used to live here was removed when
+                  // messaging moved onto the bottom navigation bar: it duplicated a
+                  // destination the user is already one tap from and pushed the
+                  // attendance history below the fold.
+                  AttendanceHistoryCard(records: snapshot.recentAttendance),
+                ],
+                const SizedBox(height: 12),
+                _SecurityCard(snapshot: snapshot),
+              ],
+            ),
+          ),
         ),
-        padding: const EdgeInsets.all(16),
-        children: [
-          _Greeting(snapshot: snapshot, onGoToTab: widget.onGoToTab),
-          const SizedBox(height: 12),
-          if (snapshot.employee == null)
-            const _NoEmployeeCard()
-          else ...[
-            _EmployeeCard(
-              employee: snapshot.employee!,
-              photoUrl: snapshot.photoUrl,
-            ),
-            const SizedBox(height: 12),
-            // The tracking pill that used to sit here was REMOVED
-            // deliberately. Its number came from the local queue, so it
-            // asserted that the server had rows it had no knowledge of. While
-            // Android's native upload path was failing with 401, that pill was
-            // still reporting success - it contradicted the real service state
-            // and hid the very bug this release exists to fix. Tracking state
-            // is exposed through the heartbeat's own status stream and through
-            // diagnostics, not through a second, contradicting status message
-            // on the home screen. Permission onboarding is unaffected and
-            // still lives in the attendance flow.
-            _TodayCard(snapshot: snapshot, onGoToTab: widget.onGoToTab),
-            const SizedBox(height: 12),
-            // The month the four cards below are reporting on. Placed directly
-            // above them so the reader never sees a figure without knowing
-            // which month it belongs to.
-            _MonthFilter(
-              months: DashboardMonthFilter.options(DateTime.now()),
-              selected: _effectiveMonth,
-              onChanged: (m) => setState(() => _month = m),
-            ),
-            const SizedBox(height: 12),
-            _MetricsGrid(
-              metrics: DashboardMetrics.fromRecords(
-                snapshot.recentAttendance,
-                month: _effectiveMonth,
-              ),
-              month: _effectiveMonth,
-            ),
-            if (widget.onGoToManagement != null) ...[
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: widget.onGoToManagement,
-                icon: const Icon(Icons.groups_outlined),
-                label: const Text('Manage team attendance'),
-              ),
-            ],
-            const SizedBox(height: 12),
-            // The Messages card that used to live here was removed when
-            // messaging moved onto the bottom navigation bar: it duplicated a
-            // destination the user is already one tap from and pushed the
-            // attendance history below the fold.
-            AttendanceHistoryCard(records: snapshot.recentAttendance),
-          ],
-          const SizedBox(height: 12),
-          _SecurityCard(snapshot: snapshot),
-        ],
-      ),
+        HostFabPublisher(
+          builder: (context) => FloatingActionButton.small(
+            heroTag: 'new_message_home',
+            tooltip: 'New message',
+            backgroundColor: AppColors.accent(context),
+            foregroundColor: Colors.white,
+            onPressed: () => startDirectMessage(context),
+            child: const Icon(Icons.edit),
+          ),
+        ),
+      ],
     );
   }
 }

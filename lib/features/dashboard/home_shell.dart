@@ -37,8 +37,18 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
 
-  /// Slot the active tab publishes its own compose button into.
-  final ValueNotifier<Widget?> _hostFab = ValueNotifier<Widget?>(null);
+  /// One compose-button slot per tab.
+  ///
+  /// ROOT CAUSE of the "Home shows the channel button" bug: with a single
+  /// shared slot, `IndexedStack` (which keeps EVERY tab mounted) left the
+  /// Messages tab's publisher writing its "Create channel" button into the
+  /// shell no matter which tab was on screen, so Home floated a messaging
+  /// action it did not own. Each tab now writes only to its own slot and the
+  /// shell renders the ACTIVE tab's slot.
+  final Map<int, ValueNotifier<Widget?>> _tabFabs = {};
+
+  ValueNotifier<Widget?> _fabSlot(int i) =>
+      _tabFabs.putIfAbsent(i, () => ValueNotifier<Widget?>(null));
 
   @override
   void initState() {
@@ -54,11 +64,14 @@ class _HomeShellState extends State<HomeShell> {
   void dispose() {
     AuthTrace.log('home', 'HomeShell dispose — Home removed from tree');
     HomeShell.requestTab.removeListener(_onTabRequest);
-    // Drop the tab's button and stop pointing at a disposed notifier, so a late
-    // publish from a torn-down tab cannot write to freed state.
-    _hostFab.value = null;
-    if (HostFabScope.current == _hostFab) HostFabScope.detach();
-    _hostFab.dispose();
+    // Drop every tab's button and stop pointing at disposed notifiers, so a
+    // late publish from a torn-down tab cannot write to freed state.
+    for (final slot in _tabFabs.values) {
+      slot.value = null;
+      if (HostFabScope.current == slot) HostFabScope.detach();
+      slot.dispose();
+    }
+    _tabFabs.clear();
     super.dispose();
   }
 
@@ -123,9 +136,8 @@ class _HomeShellState extends State<HomeShell> {
           t.label.toLowerCase().startsWith(wanted),
     );
     if (i >= 0 && i != _index) {
-      // The outgoing tab may own the compose button. Clear it so the incoming
-      // tab starts from a clean slot instead of inheriting a stale one.
-      _hostFab.value = null;
+      // No shared slot to clear any more: each tab owns its compose button,
+      // so the incoming tab simply shows its own.
       setState(() => _index = i);
     }
   }
@@ -134,6 +146,19 @@ class _HomeShellState extends State<HomeShell> {
   Widget build(BuildContext context) {
     final tabs = _tabs;
     final index = _index.clamp(0, tabs.length - 1);
+    // Drop slots for tabs that no longer exist (the Manage tab is conditional
+    // on the attendance role), so a disposed notifier is never listened to.
+    // Disposal is deferred to after the frame: build must not dispose a
+    // notifier the outgoing ValueListenableBuilder is still unsubscribing from.
+    for (final stale in _tabFabs.keys.toList()) {
+      if (stale >= tabs.length) {
+        final slot = _tabFabs.remove(stale);
+        if (slot != null) {
+          slot.value = null;
+          WidgetsBinding.instance.addPostFrameCallback((_) => slot.dispose());
+        }
+      }
+    }
     return Scaffold(
       appBar: shellAppBar(
         context,
@@ -143,12 +168,19 @@ class _HomeShellState extends State<HomeShell> {
       ),
       // The scope lets the visible tab publish its own compose button into the
       // FAB slot below, so the tab's action and the SARA mark stack instead of
-      // fighting for the same corner.
+      // fighting for the same corner. Every tab gets its OWN scope (its own
+      // slot), and the shell renders only the active tab's — see `_tabFabs`.
       body: HostFabScope(
-        notifier: _hostFab,
+        notifier: _fabSlot(index),
         child: IndexedStack(
           index: index,
-          children: [for (final t in tabs) t.screen],
+          children: [
+            for (var i = 0; i < tabs.length; i++)
+              HostFabScope(
+                notifier: _fabSlot(i),
+                child: tabs[i].screen,
+              ),
+          ],
         ),
       ),
       // SARA stays one tap away from every tab as a chat bubble.
@@ -165,7 +197,7 @@ class _HomeShellState extends State<HomeShell> {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           ValueListenableBuilder<Widget?>(
-            valueListenable: HostFabScope.current,
+            valueListenable: _fabSlot(index),
             builder: (context, hostFab, _) =>
                 hostFab ?? const SizedBox.shrink(),
           ),

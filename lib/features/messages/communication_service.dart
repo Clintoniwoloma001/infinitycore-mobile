@@ -910,7 +910,10 @@ class CommunicationService {
   }
 
   /// Full staff directory (SECURITY DEFINER RPC). Powers the Super Admin
-  /// "inspect this user" picker in the DM Inspection tab.
+  /// "inspect this user" picker in the DM Inspection tab, and the people
+  /// pickers for new direct messages / group members — the base tables are
+  /// RLS-restricted to admins, so this RPC is the only way a non-admin sees
+  /// the whole staff platform.
   Future<List<Map<String, dynamic>>> messagingDirectory({
     String? search,
   }) async {

@@ -1,15 +1,67 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/routing/app_router.dart';
 import '../../core/services/supabase_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/common.dart';
+import 'communication_service.dart';
 import 'messaging_service.dart';
 
 // ---------------------------------------------------------------------------
 // Person picker (single-select) — used for new direct chats and adding members.
 // ---------------------------------------------------------------------------
+
+/// Staff directory for the people pickers.
+///
+/// ROOT CAUSE of the "staff search only returns me" bug: this used to read the
+/// `employees` table directly, and the `employees` / `profiles` select policies
+/// are RLS-restricted to admins — a non-admin's plain select returns ONLY their
+/// own row, so the picker listed a single person (me) and a colleague's name
+/// matched nothing. The web app hit the same wall and fixed it with the
+/// SECURITY DEFINER RPC `get_messaging_directory`, which is already live and
+/// granted to `authenticated`: it returns every staff account platform-wide
+/// with only the minimum fields (id, name, email, role, title, department,
+/// branch, picture path) while keeping every base-table policy intact.
+///
+/// The current user and former staff are dropped here: the colleague list is
+/// for starting conversations with other people.
+Future<List<Map<String, dynamic>>> _staffDirectory(String query) async {
+  final q = query.trim();
+  final rows = await CommunicationService.instance.messagingDirectory(
+    search: q.isEmpty ? null : q,
+  );
+  final me = SupabaseService.userId;
+  return rows.where((r) {
+    final uid = '${r['user_id'] ?? ''}';
+    if (uid.isEmpty || uid == 'null') return false;
+    if (me != null && uid == me) return false;
+    // `is_former_employee` is null (not false) for profile-only accounts, so
+    // only an explicit true excludes a row.
+    if (r['is_former_employee'] == true) return false;
+    return true;
+  }).toList();
+}
+
+/// Opens the shared staff picker and starts — or reuses — the 1:1 thread with
+/// the picked colleague. The Home tab's FAB and the Messages compose button
+/// both go through here, so the two surfaces cannot drift apart.
+Future<void> startDirectMessage(BuildContext context) async {
+  await showPersonPickerSheet(
+    context,
+    title: 'New message',
+    onPick: (userId) async {
+      final thread = await MessagingService.instance.getOrCreateThread(userId);
+      final threadId = '${thread['id'] ?? ''}';
+      if (threadId.isEmpty) {
+        showSnack('Conversation could not be opened.');
+        return;
+      }
+      if (context.mounted) await context.push('/messages/$threadId');
+    },
+  );
+}
 
 Future<void> showPersonPickerSheet(
   BuildContext context, {
@@ -61,13 +113,9 @@ class _PersonPickerSheetState extends State<_PersonPickerSheet> {
       _error = null;
     });
     try {
-      final rows = await MessagingService.instance.searchPeople(q);
-      final withAccounts = rows.where((r) {
-        final uid = '${r['user_id']}';
-        return uid.isNotEmpty && uid != 'null';
-      }).toList();
+      final rows = await _staffDirectory(q);
       if (!mounted) return;
-      setState(() => _people = withAccounts);
+      setState(() => _people = rows);
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
     } finally {
@@ -389,13 +437,9 @@ class _CreateGroupSheetState extends State<_CreateGroupSheet> {
   Future<void> _loadPeople(String q) async {
     setState(() => _loadingPeople = true);
     try {
-      final rows = await MessagingService.instance.searchPeople(q);
-      final withAccounts = rows.where((r) {
-        final uid = '${r['user_id']}';
-        return uid.isNotEmpty && uid != 'null';
-      }).toList();
+      final rows = await _staffDirectory(q);
       if (!mounted) return;
-      setState(() => _people = withAccounts);
+      setState(() => _people = rows);
     } catch (_) {
       if (mounted) setState(() => _people = []);
     } finally {

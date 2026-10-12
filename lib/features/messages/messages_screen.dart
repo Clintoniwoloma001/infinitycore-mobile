@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/routing/app_router.dart';
 import '../../core/security/role_guard.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/supabase_service.dart';
@@ -152,10 +151,13 @@ class _MessagesScreenState extends State<MessagesScreen>
   /// a duplicate.
   Widget? _composeFab(BuildContext context) {
     if (!widget.embedded) return null;
+    // Label follows the ACTIVE tab, matching the web's per-tab compose
+    // action: Chats starts a direct message, Channels creates a channel,
+    // Groups creates a group.
     final (label, heroTag, onPressed) = switch (_tabs.index) {
-      1 => ('New channel', 'new_channel', _newChannel),
-      2 => ('New group', 'new_group', _newGroup),
-      _ => ('New chat', 'new_chat', _newChat),
+      1 => ('Create channel', 'new_channel', _newChannel),
+      2 => ('Create group', 'new_group', _newGroup),
+      _ => ('New message', 'new_chat', _newChat),
     };
     return FloatingActionButton.small(
       heroTag: heroTag,
@@ -167,19 +169,7 @@ class _MessagesScreenState extends State<MessagesScreen>
     );
   }
 
-  Future<void> _newChat() => showPersonPickerSheet(
-    context,
-    title: 'Start a conversation',
-    onPick: (userId) async {
-      final thread = await MessagingService.instance.getOrCreateThread(userId);
-      final threadId = '${thread['id'] ?? ''}';
-      if (threadId.isEmpty) {
-        if (mounted) showSnack('Conversation could not be opened.');
-        return;
-      }
-      if (mounted) await context.push('/messages/$threadId');
-    },
-  );
+  Future<void> _newChat() => startDirectMessage(context);
 
   Future<void> _newChannel() => showCreateChannelSheet(
     context,
