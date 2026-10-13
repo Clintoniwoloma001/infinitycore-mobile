@@ -1,13 +1,15 @@
 import 'package:intl/intl.dart';
 
 import '../../core/services/supabase_service.dart';
+import 'tracking_classifier.dart';
 
 /// Employee Tracking on mobile — SUPER ADMIN ONLY.
 ///
 /// Reads the SAME server-authoritative RPCs as the web Command Centre:
 ///   * employee_tracking_access()   — may I read tracking at all?
-///   * employee_live_positions_v3() — one live row per employee (SAME RPC the
-///     web reads, so both apps render identical locations)
+///   * employee_live_positions_v4() — one live row per employee with a fix in
+///     the last 48 h (SAME RPC and SAME window the web Live positions tab
+///     reads, so both apps render identical rows and counts)
 ///   * employee_location_history()  — that employee's points for one day
 ///
 /// Every inside/outside verdict comes from `resolve_employee_location()` on the
@@ -37,30 +39,60 @@ class TrackingService {
     }
   }
 
-  /// Live positions, most recent first.
+  /// Live positions — only employees with a fix in the last 48 h.
   ///
-  /// Reads `employee_live_positions_v3` — the SAME RPC (same freshness
-  /// buckets, same `classify_geofence` verdict, same emulator exclusion) the
-  /// web Command Centre reads. A v2 fallback keeps older databases working;
-  /// v3-first ordering means identical data on both apps wherever deployed.
+  /// Calls `employee_live_positions_v4` — the SAME RPC the web's Live positions
+  /// tab calls (`trackingService.livePositionsRecent({ recentHours: 48 })`), so
+  /// both clients return identical rows. The window is enforced SERVER-side by
+  /// the RPC (`recorded_at >= now() - interval '48 h'`), never by a client-side
+  /// filter over every tracked employee.
+  ///
+  /// A v3/v2 fallback keeps older databases working; the 48 h window is applied
+  /// to their rows by `classifyTrackingEntry` instead of the RPC.
   Future<List<TrackedEmployee>> livePositions({
-    int withinMinutes = 240,
+    int recentHours = trackingRecentHours,
   }) async {
     Map<String, dynamic>? denied;
-    for (final rpc in ['employee_live_positions_v3', 'employee_live_positions_v2']) {
+    for (final attempt in <({String rpc, Map<String, dynamic> params})>[
+      (
+        rpc: 'employee_live_positions_v4',
+        params: {
+          'p_recent_hours': recentHours,
+          'p_department': null,
+          'p_branch_id': null,
+          'p_role': null,
+          'p_search': null,
+        },
+      ),
+      (
+        rpc: 'employee_live_positions_v3',
+        params: {'p_within_minutes': recentHours * 60},
+      ),
+      (
+        rpc: 'employee_live_positions_v2',
+        params: {'p_within_minutes': recentHours * 60},
+      ),
+    ]) {
       try {
         final res = await SupabaseService.client.rpc(
-          rpc,
-          params: {'p_within_minutes': withinMinutes},
+          attempt.rpc,
+          params: attempt.params,
         );
         if (res is Map && res['ok'] == false) {
           denied = Map<String, dynamic>.from(res);
           continue;
         }
         if (res is! List) return const [];
+        final now = DateTime.now();
         return res
             .whereType<Map>()
-            .map((e) => TrackedEmployee.fromJson(Map<String, dynamic>.from(e)))
+            .map((e) => Map<String, dynamic>.from(e))
+            // The 48 h window, applied through the ONE classifier so every
+            // count on screen comes from the same decision.
+            .where(
+              (row) => classifyTrackingEntry(row, now: now) != null,
+            )
+            .map(TrackedEmployee.fromJson)
             .toList(growable: false);
       } catch (_) {
         denied ??= {'message': 'Unable to load live positions'};
@@ -112,8 +144,13 @@ class TrackedEmployee {
     required this.locationLabel,
     required this.resolvedPlace,
     required this.minutesAgo,
+    this.department = '',
+    this.branchId = '',
     this.latitude,
     this.longitude,
+    this.accuracyM,
+    this.radiusM,
+    this.bucket,
   });
 
   /// Null-safe text: null, blank, and the literal four characters "null"
@@ -127,11 +164,14 @@ class TrackedEmployee {
   }
 
   factory TrackedEmployee.fromJson(Map<String, dynamic> j) => TrackedEmployee(
+    bucket: classifyTrackingEntry(j, now: DateTime.now()),
     id: (_t(j['employee_id'] ?? j['id']) ?? '').toString(),
     name: _t(j['full_name'] ?? j['employee_name'] ?? j['name']) ?? '—',
     employeeNumber: (_t(j['employee_number']) ?? '').toString(),
     position: (_t(j['position'] ?? j['role'] ?? j['designation']) ?? '').toString(),
+    department: (_t(j['department']) ?? '').toString(),
     branchName: (_t(j['branch_name'] ?? j['branch']) ?? '').toString(),
+    branchId: (_t(j['branch_id']) ?? '').toString(),
     insideGeofence: j['inside_geofence'] == true ||
         (j['geofence_status']?.toString().toLowerCase() == 'inside'),
     locationLabel:
@@ -146,6 +186,8 @@ class TrackedEmployee {
             : null),
     latitude: (j['latitude'] as num?)?.toDouble(),
     longitude: (j['longitude'] as num?)?.toDouble(),
+    accuracyM: (j['accuracy_m'] ?? j['accuracy']) as num?,
+    radiusM: (j['radius_m'] ?? j['fence_radius_m']) as num?,
   );
 
   final String id;
@@ -157,11 +199,38 @@ class TrackedEmployee {
   final String locationLabel;
   final String resolvedPlace;
   final int? minutesAgo;
+  final String department;
+  final String branchId;
   final double? latitude;
   final double? longitude;
+  final num? accuracyM;
+  final num? radiusM;
+
+  /// The Live-positions bucket this row belongs to — decided by the ONE
+  /// classifier from the same server fields the web tab counts from, so the
+  /// header, the segment counts and a card's badge can never disagree.
+  /// Null means the row is outside the 48 h window and must not be listed.
+  final TrackingBucket? bucket;
+
+  /// GPS accuracy and fence radius, used only for the web's "(low GPS
+  /// accuracy)" warning. The verdict itself still comes from the server.
+  bool get isLowAccuracy {
+    final accuracy = accuracyM;
+    final radius = radiusM;
+    return accuracy != null && radius != null && radius > 0 && accuracy > radius;
+  }
 
   /// Older than this is not "live", and saying so is the entire point.
-  bool get isStale => (minutesAgo ?? 0) > 45;
+  /// Threshold comes from [trackingStaleMinutes] (the web's 30-minute
+  /// DELAYED boundary) so the two clients cannot disagree.
+  bool get isStale => (minutesAgo ?? 0) > trackingStaleMinutes;
+
+  /// Fresh enough to still show a verdict, but older than six minutes — the
+  /// web's amber "delayed" hint.
+  bool get isDelayed {
+    final minutes = minutesAgo;
+    return minutes != null && minutes > 6 && minutes <= trackingStaleMinutes;
+  }
 
   /// Where this person actually is, for display.
   ///
