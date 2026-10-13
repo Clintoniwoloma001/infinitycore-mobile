@@ -1,6 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/routing/app_router.dart';
 import '../../core/services/supabase_service.dart';
@@ -46,7 +47,11 @@ class _ConversationScreenState extends State<ConversationScreen> {
   String _description = '';
   bool _loading = true;
   String? _error;
-  RealtimeChannel? _sub;
+
+  /// Live updates come from the shared hub subscription (ONE channel for the
+  /// whole user). This screen used to open its own per-conversation channel,
+  /// which doubled the subscriptions and missed the hub's reconnect catch-up.
+  StreamSubscription<MessagingEvent>? _hubSub;
 
   String get _me => SupabaseService.client.auth.currentUser?.id ?? '';
   bool get _isGroup => widget.kind == ConversationKind.group;
@@ -68,7 +73,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
   @override
   void dispose() {
     MessagingHub.instance.setActiveConversation(null);
-    _sub?.unsubscribe();
+    _hubSub?.cancel();
     _controller.dispose();
     _scroll.dispose();
     super.dispose();
@@ -135,12 +140,13 @@ class _ConversationScreenState extends State<ConversationScreen> {
   }
 
   void _subscribe() {
-    _sub?.unsubscribe();
-    _sub = MessagingService.instance.subscribeToConversation(
-      _isGroup ? 'group_id' : 'channel_id',
-      widget.id,
-      _onIncoming,
-    );
+    _hubSub?.cancel();
+    _hubSub = MessagingHub.instance.events.listen((event) {
+      final wanted = _isGroup ? 'group' : 'channel';
+      if (event.type == wanted && event.conversationId == widget.id) {
+        _onIncoming(event.message);
+      }
+    });
   }
 
   void _onIncoming(Map<String, dynamic> record) {

@@ -63,18 +63,59 @@ Future<void> startDirectMessage(BuildContext context) async {
   );
 }
 
+/// Scroll behaviour for the sheets: dragging the result list dismisses the
+/// keyboard instead of selecting the row the finger happens to land on.
+class _PickSheetScrollBehavior extends ScrollBehavior {
+  const _PickSheetScrollBehavior();
+
+  @override
+  ScrollViewKeyboardDismissBehavior getKeyboardDismissBehavior(
+    BuildContext context,
+  ) => ScrollViewKeyboardDismissBehavior.onDrag;
+}
+
+/// Opens a modal bottom sheet that stays usable while the keyboard is up.
+///
+/// The sheets used to be opened without `isScrollControlled` and without any
+/// bottom view-insets padding, so on a small screen the keyboard covered the
+/// results — including the single result a staff search had just found — and
+/// the search field could scroll out of reach. Every picker and create sheet
+/// in this module goes through here so the behaviour cannot drift apart:
+/// the sheet is lifted above the keyboard, its results scroll, and a drag
+/// dismisses the keyboard instead of selecting a row under it.
+Future<T?> showKeyboardAwareSheet<T>({
+  required BuildContext context,
+  required WidgetBuilder builder,
+  Color? backgroundColor,
+}) {
+  return showModalBottomSheet<T>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    backgroundColor: backgroundColor,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (sheetContext) => Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(sheetContext).viewInsets.bottom,
+      ),
+      child: ScrollConfiguration(
+        behavior: const _PickSheetScrollBehavior(),
+        child: builder(sheetContext),
+      ),
+    ),
+  );
+}
+
 Future<void> showPersonPickerSheet(
   BuildContext context, {
   required String title,
   required Future<void> Function(String userId) onPick,
 }) {
-  return showModalBottomSheet<void>(
+  return showKeyboardAwareSheet<void>(
     context: context,
-    isScrollControlled: true,
     backgroundColor: AppColors.surface(context),
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
     builder: (_) => _PersonPickerSheet(title: title, onPick: onPick),
   );
 }
@@ -130,7 +171,12 @@ class _PersonPickerSheetState extends State<_PersonPickerSheet> {
       padding: EdgeInsets.only(top: pad + 12),
       child: ConstrainedBox(
         constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.8,
+          // Cap against the VISIBLE area: with the keyboard up, a fraction of
+          // the full screen height would overflow the sheet.
+          maxHeight:
+              (MediaQuery.of(context).size.height -
+                  MediaQuery.of(context).viewInsets.bottom) *
+              0.9,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -238,13 +284,9 @@ Future<void> showCreateChannelSheet(
   BuildContext context, {
   required Future<void> Function(String id) onCreated,
 }) {
-  return showModalBottomSheet<void>(
+  return showKeyboardAwareSheet<void>(
     context: context,
-    isScrollControlled: true,
     backgroundColor: AppColors.surface(context),
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
     builder: (_) => _CreateChannelSheet(onCreated: onCreated),
   );
 }
@@ -317,10 +359,9 @@ class _CreateChannelSheetState extends State<_CreateChannelSheet> {
   Widget build(BuildContext context) {
     final topPad = MediaQuery.of(context).viewPadding.top;
     return Padding(
-      padding: EdgeInsets.only(
-        top: topPad + 12,
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-      ),
+      // The keyboard-aware sheet wrapper already lifts the sheet above the
+      // keyboard, so only the top inset is applied here.
+      padding: EdgeInsets.only(top: topPad + 12),
       child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
         child: Column(
@@ -391,13 +432,9 @@ Future<void> showCreateGroupSheet(
   BuildContext context, {
   required Future<void> Function(String id) onCreated,
 }) {
-  return showModalBottomSheet<void>(
+  return showKeyboardAwareSheet<void>(
     context: context,
-    isScrollControlled: true,
     backgroundColor: AppColors.surface(context),
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
     builder: (_) => _CreateGroupSheet(onCreated: onCreated),
   );
 }
@@ -488,13 +525,17 @@ class _CreateGroupSheetState extends State<_CreateGroupSheet> {
   Widget build(BuildContext context) {
     final topPad = MediaQuery.of(context).viewPadding.top;
     return Padding(
-      padding: EdgeInsets.only(
-        top: topPad + 12,
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-      ),
+      // The keyboard-aware sheet wrapper already lifts the sheet above the
+      // keyboard, so only the top inset is applied here.
+      padding: EdgeInsets.only(top: topPad + 12),
       child: ConstrainedBox(
         constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.88,
+          // Cap against the VISIBLE area: with the keyboard up, a fraction
+          // of the full screen height would overflow the sheet.
+          maxHeight:
+              (MediaQuery.of(context).size.height -
+                  MediaQuery.of(context).viewInsets.bottom) *
+              0.9,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -668,13 +709,9 @@ Future<void> showConversationInfoSheet(
   required String kind,
   required String id,
 }) {
-  return showModalBottomSheet<void>(
+  return showKeyboardAwareSheet<void>(
     context: context,
-    isScrollControlled: true,
     backgroundColor: AppColors.surface(context),
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
     builder: (_) => _ConversationInfoSheet(kind: kind, id: id),
   );
 }
@@ -814,13 +851,17 @@ class _ConversationInfoSheetState extends State<_ConversationInfoSheet> {
   Widget build(BuildContext context) {
     final topPad = MediaQuery.of(context).viewPadding.top;
     return Padding(
-      padding: EdgeInsets.only(
-        top: topPad + 12,
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-      ),
+      // The keyboard-aware sheet wrapper already lifts the sheet above the
+      // keyboard, so only the top inset is applied here.
+      padding: EdgeInsets.only(top: topPad + 12),
       child: ConstrainedBox(
         constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.85,
+          // Cap against the VISIBLE area: with the keyboard up, a fraction
+          // of the full screen height would overflow the sheet.
+          maxHeight:
+              (MediaQuery.of(context).size.height -
+                  MediaQuery.of(context).viewInsets.bottom) *
+              0.9,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,

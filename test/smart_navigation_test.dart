@@ -38,6 +38,10 @@ List<String> visibleFor(String? role, {String? storedDepartment}) =>
             // [visibleDestinations] uses. Without this arm a default `_ => true`
             // would hand the screen to every role, including plain staff.
             'staff-analytics' => role != null && canManageAttendance(role),
+            // Lateness Reasons is the HR-head audience (Head of HR, HR
+            // Officer, Super Admin). Without this arm a default `_ => true`
+            // would hand every employee's lateness history to plain staff.
+            'lateness-reasons' => role != null && canReviewLateness(role),
             // Employee Tracking is a five-role list (Super Admin, Head of HR,
             // MD/CEO, Chairman, Director). Same reason: a default `_ => true`
             // would expose every other employee's live location.
@@ -451,6 +455,8 @@ void main() {
         'staff-analytics',
         'employee-tracking',
         'geofences',
+        // HR-head audience (canReviewLateness), not a single department.
+        'lateness-reasons',
       };
 
       for (final d in appDestinations()) {

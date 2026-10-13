@@ -10,6 +10,8 @@ import '../../core/theme/app_theme.dart';
 import '../../shared/models/models.dart';
 import '../../shared/utils/formatters.dart';
 import '../../shared/widgets/attendance_history_card.dart';
+import 'lateness_reason_modal.dart';
+import 'lateness_service.dart';
 import '../../shared/widgets/common.dart';
 import '../../features/scanner/terminal_scanner_screen.dart';
 import 'attendance_service.dart';
@@ -309,6 +311,26 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       _success('Clocked in. Have a productive day!');
       _load();
       await ReminderService.instance.sync();
+      // The existing late rule already marked this punch late: a reason is now
+      // mandatory. The modal queues it locally when offline, so it never blocks
+      // or undoes the clock-in.
+      final lateMinutes = (result['late_minutes'] is num)
+          ? (result['late_minutes'] as num).toInt()
+          : int.tryParse('${result['late_minutes'] ?? 0}') ?? 0;
+      if (lateMinutes > 0 && mounted) {
+        await LatenessReasonModal.show(
+          context,
+          minutesLate: lateMinutes,
+          clockedInAt:
+              DateTime.tryParse(record?.clockIn ?? '') ?? DateTime.now(),
+          attendanceId: record?.id,
+          branchName: _employee?.branchName.isNotEmpty == true
+              ? _employee!.branchName
+              : _employee?.branch,
+        );
+      }
+      // Flush any reason that was queued on an earlier offline clock-in.
+      await LatenessService.instance.syncQueue();
     } catch (e) {
       debugPrint('Attendance._clockIn: error=${e.runtimeType}: $e');
       _fail(e);

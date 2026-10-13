@@ -14,6 +14,7 @@ import '../../features/admin/bound_devices_screen.dart';
 import '../../features/auth/splash_screen.dart';
 import '../../features/attendance/attendance_management_screen.dart';
 import '../../features/attendance/public_terminal_screen.dart';
+import '../../features/attendance/lateness_reasons_screen.dart';
 import '../../features/attendance/staff_analytics_screen.dart';
 import '../../features/attendance/employee_tracking_screen.dart';
 import '../../features/automation/automation_screen.dart';
@@ -80,6 +81,15 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/staff-analytics',
       builder: (_, _) => const StaffAnalyticsScreen(),
+    ),
+    // Lateness Reasons review (HR-head audience). The auth gate redirects
+    // everyone else before this mounts; RLS on lateness_reasons is the real
+    // boundary. The literal path is kept (rather than the route constant) so
+    // the routing-wiring test can prove every registered destination has a
+    // GoRoute.
+    GoRoute(
+      path: '/lateness-reasons',
+      builder: (_, _) => const LatenessReasonsScreen(),
     ),
     // Employee Tracking. Gated on a fixed five-role list - see
     // `canAccessEmployeeTracking` for why this is stricter than the web.

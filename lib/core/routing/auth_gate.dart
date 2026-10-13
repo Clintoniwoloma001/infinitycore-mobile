@@ -131,6 +131,13 @@ String? redirectDecision(AuthGateState auth, String loc, Uri uri) {
     return '/home';
   }
 
+  // Lateness Reasons is HR-head only (Head of HR, HR Officer, Super Admin).
+  // Redirecting rather than rendering a refusal, so the screen never mounts
+  // for anyone else; RLS on lateness_reasons is the authoritative boundary.
+  if (loc == latenessReasonsRoute && !canReviewLateness(auth.role)) {
+    return '/home';
+  }
+
   // Employee Tracking is gated on a fixed five-role list (Super Admin, Head
   // of HR, MD/CEO, Chairman, Director), which is STRICTER than the web: a
   // tracking GRANT issued on web deliberately does not open it here.

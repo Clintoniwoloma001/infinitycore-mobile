@@ -127,6 +127,10 @@ const String executiveRoute = '/director';
 /// reads the same server-authoritative summary RPC.
 const String staffAnalyticsRoute = '/staff-analytics';
 
+/// Lateness Reasons review screen. Role-gated by [canReviewLateness] (the
+/// server's `is_hr_reviewer()` is the real boundary).
+const String latenessReasonsRoute = '/lateness-reasons';
+
 /// Employee Tracking. Super Admin + Head of HR + executive family on mobile —
 /// see [canAccessEmployeeTracking]. Kept as a constant so the router, the menu
 /// and the auth gate cannot drift apart on the path string.
@@ -492,6 +496,22 @@ bool canManageAttendance(String role) => const [
   AppRoles.headOfHumanResources,
   AppRoles.hrOfficer,
   AppRoles.branchManager,
+].contains(role);
+
+/// Lateness Reasons review — the HR-head audience: Head of HR, HR Officer and
+/// Super Admin.
+///
+/// `hr_manager` is the legacy spelling of the Head of HR role and is carried
+/// for rename tolerance (0 rows today). This mirrors
+/// `public.is_hr_reviewer()` in
+/// `supabase/migrations/20261112000000_messaging_receipts_lateness_rls.sql`,
+/// which is the actual boundary: the client gate only hides the entry, while
+/// RLS decides what the screen can read.
+bool canReviewLateness(String role) => const [
+  AppRoles.superAdmin,
+  AppRoles.headOfHumanResources,
+  AppRoles.hrManager,
+  AppRoles.hrOfficer,
 ].contains(role);
 
 /// Employee Tracking — Super Admin, Head of HR and the executive family

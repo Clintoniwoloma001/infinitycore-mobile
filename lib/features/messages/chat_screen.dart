@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -28,6 +30,10 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
+  /// Live updates come from the shared hub subscription (ONE channel for the
+  /// whole user). This screen used to open its own per-thread channel, which
+  /// doubled the subscriptions and missed the hub's reconnect catch-up.
+  StreamSubscription<MessagingEvent>? _hubSub;
   final _scroll = ScrollController();
 
   List<ChatMessage> _messages = [];
@@ -59,6 +65,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void dispose() {
     MessagingHub.instance.setActiveConversation(null);
+    _hubSub?.cancel();
     _scroll.dispose();
     super.dispose();
   }
@@ -159,8 +166,11 @@ class _ChatScreenState extends State<ChatScreen> {
             .trim();
         _messages = messages;
       });
-      ChatService.instance.subscribeToThread(widget.threadId, _onIncoming);
-      _markRead();
+      _hubSub = MessagingHub.instance.events.listen((event) {
+        if (event.type == 'direct' && event.conversationId == widget.threadId) {
+          _onIncoming(event.message);
+        }
+      });      _markRead();
       _scrollToBottom();
     } catch (e) {
       if (mounted) {

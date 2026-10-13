@@ -112,6 +112,29 @@ class NotificationService {
   static const quickClockInAction = 'quick_clock_in';
   static const quickClockOutAction = 'quick_clock_out';
 
+  /// Dedicated *urgent message* channel: maximum importance, sound and
+  /// vibration, so an Important/Urgent message that demands an
+  /// acknowledgment is unmistakable even with the app backgrounded.
+  ///
+  /// A separate channel id from [channelMessages] (high) and from
+  /// [channelReminders] (alarm audio usage): Android freezes a channel's
+  /// importance, sound and vibration at creation time, and message urgency is
+  /// not an alarm. Users can therefore silence routine chat, keep alarms, and
+  /// still hear urgent messages — or silence urgent without losing alarms.
+  static const channelUrgent = 'infinitycore_urgent';
+
+  static const AndroidNotificationChannel _urgentChannel =
+      AndroidNotificationChannel(
+    channelUrgent,
+    'Urgent messages',
+    description:
+        'Important and urgent messages that need your acknowledgment. Maximum '
+        'importance with sound and vibration.',
+    importance: Importance.max,
+    playSound: true,
+    enableVibration: true,
+  );
+
   /// Attendance listens to this notifier so an action can run the real,
   /// geofence-checked punch path rather than merely opening the tab.
   static final ValueNotifier<int> quickActionChanged = ValueNotifier<int>(0);
@@ -147,8 +170,10 @@ class NotificationService {
     );
     // Register the alarm channel up front so a reminder scheduled later can
     // never land on a channel that does not exist yet (which would silently
-    // fall back to default-importance behaviour).
+    // fall back to default-importance behaviour). The urgent-message channel is
+    // registered for the same reason.
     await _ensureReminderChannel();
+    await _ensureUrgentChannel();
     _ready = true;
 
     // Handle a notification action that cold-started the app. The attendance
@@ -236,6 +261,7 @@ class NotificationService {
     if (channel == _reminderChannel.id) return _reminderChannel.name;
     if (channel == channelAnnouncements) return 'Announcements';
     if (channel == channelMessages) return 'Messages';
+    if (channel == channelUrgent) return 'Urgent messages';
     return 'InfinityCore';
   }
 
@@ -255,6 +281,27 @@ class NotificationService {
       debugPrint(
         'Could not create the reminder alarm channel; reminders will fall back '
         'to normal-notification behaviour: $error',
+      );
+      return false;
+    }
+  }
+
+  /// Creates (or re-confirms) the urgent-message channel. Returns false when
+  /// the channel could not be registered, in which case an urgent message
+  /// still posts — on the routine channel, at routine importance.
+  Future<bool> _ensureUrgentChannel() async {
+    try {
+      final android = _plugin
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >();
+      if (android == null) return true;
+      await android.createNotificationChannel(_urgentChannel);
+      return true;
+    } catch (error) {
+      debugPrint(
+        'Could not create the urgent message channel; urgent messages will '
+        'fall back to routine behaviour: $error',
       );
       return false;
     }

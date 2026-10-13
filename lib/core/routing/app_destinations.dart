@@ -156,6 +156,18 @@ List<AppDestination> appDestinations() => const [
     route: staffAnalyticsRoute,
   ),
 
+  // Lateness Reasons — the HR-head audience (Head of HR, HR Officer, Super
+  // Admin), mirroring `is_hr_reviewer()` on the server. Standalone and
+  // role-gated rather than department-gated: HR Officer and Head of HR carry
+  // different department tags, so a department gate would strand one of them.
+  AppDestination(
+    id: 'lateness-reasons',
+    label: 'Lateness Reasons',
+    subtitle: 'Review why colleagues clocked in late',
+    icon: Icons.fact_check_outlined,
+    route: latenessReasonsRoute,
+  ),
+
   // Employee Tracking.
   //
   // OWNERSHIP: a fixed five-role list — Super Admin, Head of HR and the
@@ -243,6 +255,9 @@ List<AppDestination> visibleDestinations() {
           // Role-gated rather than department-gated, because the audience is
           // every role allowed to manage attendance.
           'staff-analytics' => canManageAttendance(role),
+          // HR-head audience only (Head of HR, HR Officer, Super Admin),
+          // mirroring `is_hr_reviewer()` on the server.
+          'lateness-reasons' => canReviewLateness(role),
           // A fixed five-role list (Super Admin, Head of HR, MD/CEO,
           // Chairman, Director). Precise staff location is not DELEGATED on
           // mobile, so this is a role list and not the RPC's answer.

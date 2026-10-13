@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/diagnostics/auth_trace.dart';
 import '../../core/services/notification_service.dart';
 import '../../core/services/supabase_service.dart';
 import 'acknowledgement_service.dart';
@@ -63,6 +64,20 @@ class MessagingHub with WidgetsBindingObserver {
   bool _started = false;
   bool _disposed = false;
 
+  /// True while the realtime channel is not carrying events. Only while it is
+  /// down do we poll, so a healthy socket never costs an extra request.
+  bool _channelDown = true;
+
+  /// Poll interval used ONLY while the channel is down.
+  static const _pollInterval = Duration(seconds: 15);
+
+  Timer? _pollTimer;
+
+  /// Newest server `created_at` this client has accounted for. The catch-up
+  /// query asks for rows strictly newer than this, so a resume or a reconnect
+  /// (or a poll while the channel is down) cannot miss or duplicate a message.
+  DateTime? _lastSeen;
+
   /// Conversation currently on screen, as `type:id`.
   String? _activeConversation;
 
@@ -103,6 +118,9 @@ class MessagingHub with WidgetsBindingObserver {
 
     _subscribe();
     unawaited(refresh());
+    // Learn the newest server timestamp so the first real reconnect catch-up
+    // does not re-notify history the user already read before the app closed.
+    unawaited(_catchUp(bootstrap: true));
   }
 
   @override
@@ -110,10 +128,12 @@ class MessagingHub with WidgetsBindingObserver {
     if (_disposed) return;
     if (state == AppLifecycleState.resumed) {
       // A backgrounded app can hold a dead socket. Recreating the channel and
-      // flushing the outbox is more reliable than diagnosing the old one.
+      // flushing the outbox is more reliable than diagnosing the old one. The
+      // catch-up query then picks up anything the dead socket swallowed.
       _teardownSubscription();
       _subscribe();
       unawaited(refresh());
+      unawaited(_catchUp());
       unawaited(flushOutbox());
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached ||
@@ -129,6 +149,8 @@ class MessagingHub with WidgetsBindingObserver {
   void _subscribe() {
     if (_disposed || _me.isEmpty) return;
     _teardownSubscription();
+    // The status callback is what tells a healthy socket apart from a dead
+    // one: only a dead one pays for the 15s poll.
     _channel = SupabaseService.client
         .channel('messaging_hub')
         .onPostgresChanges(
@@ -149,13 +171,88 @@ class MessagingHub with WidgetsBindingObserver {
             isInsert: false,
           ),
         )
-        .subscribe();
+        .subscribe((status, error) {
+          if (_disposed) return;
+          final up = status == RealtimeSubscribeStatus.subscribed;
+          if (up == !_channelDown) return;
+          _channelDown = !up;
+          AuthTrace.log(
+            'hub',
+            'realtime channel ${up ? 'subscribed' : 'down'} ($status'
+            '${error == null ? '' : ', $error'}) — '
+            '${up ? 'polling stops' : 'polling every ${_pollInterval.inSeconds}s'}',
+          );
+          _pollTimer?.cancel();
+          _pollTimer = null;
+          if (_channelDown) {
+            _pollTimer = Timer.periodic(_pollInterval, (_) {
+              unawaited(_catchUp());
+            });
+          } else {
+            // A fresh socket may have missed rows while it was connecting.
+            unawaited(_catchUp());
+          }
+        });
   }
 
   void _teardownSubscription() {
+    _pollTimer?.cancel();
+    _pollTimer = null;
+    _channelDown = true;
     final c = _channel;
     _channel = null;
     if (c != null) unawaited(c.unsubscribe());
+  }
+
+  /// Fetches messages the client has not yet accounted for and feeds them
+  /// through the same path realtime uses, so a caught-up message updates the
+  /// list, the unread badge and (when the conversation is not on screen) the
+  /// notification exactly like a live one.
+  ///
+  /// [bootstrap] only learns the newest timestamp — it is used on start, where
+  /// anything older was already seen before the app last closed.
+  Future<void> _catchUp({bool bootstrap = false}) async {
+    if (_disposed || _me.isEmpty) return;
+    try {
+      final from = SupabaseService.client.from('chat_messages').select();
+      final List<dynamic> rows;
+      if (bootstrap) {
+        rows = await from.order('created_at', ascending: false).limit(1);
+      } else if (_lastSeen != null) {
+        rows = await from
+            .gt('created_at', _lastSeen!.toUtc().toIso8601String())
+            .order('created_at', ascending: false)
+            .limit(200);
+      } else {
+        // Nothing has been seen yet and this is not a bootstrap: the caller
+        // (start) already bootstrapped, so there is nothing to catch up to.
+        return;
+      }
+      final records = (rows as List? ?? [])
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+      if (records.isEmpty) return;
+
+      // `_lastSeen` is the newest row's SERVER timestamp, and only ever moves
+      // forward, so an out-of-order record can never make a later catch-up ask
+      // for rows it has already processed.
+      for (final r in records) {
+        final at = DateTime.tryParse('${r['created_at'] ?? ''}');
+        if (at != null && (_lastSeen == null || at.isAfter(_lastSeen!))) {
+          _lastSeen = at.toUtc();
+        }
+      }
+      if (bootstrap) return;
+
+      // Oldest first so the dedupe LRU and ordering behave like a live stream.
+      for (final r in records.reversed) {
+        _onRecord(r, isInsert: true);
+      }
+    } catch (_) {
+      // Offline or a transient failure: the next resume, reconnect or poll
+      // (while the channel is down) retries.
+    }
   }
 
   bool _remember(String id) {
@@ -249,7 +346,10 @@ class MessagingHub with WidgetsBindingObserver {
         body: copy.body,
         // Focus the message so the tap lands on the acknowledgment control.
         route: '${_routeFor(event)}?focus=${record['id'] ?? ''}',
-        channel: NotificationService.channelReminders,
+        // Urgent messages belong on the urgent channel (max importance, sound
+        // and vibration) — not the alarm channel, which is reserved for the
+        // clock-in/out reminders.
+        channel: NotificationService.channelUrgent,
         highPriority: true,
       );
       return;
@@ -370,6 +470,8 @@ class MessagingHub with WidgetsBindingObserver {
 
   void dispose() {
     _disposed = true;
+    _pollTimer?.cancel();
+    _pollTimer = null;
     WidgetsBinding.instance.removeObserver(this);
     _authSub?.cancel();
     _teardownSubscription();
