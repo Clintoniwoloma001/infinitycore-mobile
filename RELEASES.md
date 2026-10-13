@@ -31,7 +31,7 @@ which reproduces the shipped artifact. For `1.1.9+24` that was confirmed by:
 | 1.1.9+22 | `9355964` | — | 888690 | 3.47.6 | 2026-10-10 | not recorded | none | native apikey repair + Dart cadence fallback. |
 | 1.1.8+21 | `6cfdd62` | `v1.1.8+21` | 888564 | 3.47.6 | 2026-10-10 | not recorded | none | offline-queue guarantees + clock-independent tracking. Only other tag in the repo. |
 | 1.1.8+20 | `3eb157b` | — | 887671 | 3.47.6 | 2026-10-10 | not recorded | none | Use My Location on Add fence, resilient heartbeat GPS, tracking SQL pack. |
-| 1.1.8+19 | `4d00bf5` | — | 886692 | 3.47.6 | 2026-10-10 | not recorded | none | 1.1.7 launch crash (R8/WorkManager) + tracking hardening. |
+| 1.1.10+25 | `0eafdff` (version bump: 1.1.9+24 → 1.1.10+25) | `release/v1.1.10+25` | 894862 | 3.47.6 (`c98f9e9a90`) | 2026-10-13 | IPA not yet uploaded - pending TestFlight release | none | FULL ENGINE UPGRADE RELEASE. Fixes iOS 26.6.2 `EXC_BAD_ACCESS (SIGSEGV) KERN_INVALID_ADDRESS` in `dart::ScavengerVisitor::VisitPointers` (Flutter engine GC). Important: Shorebird patches are Dart-only and cannot fix native engine code - a new engine release is REQUIRED. Engine slug `b8c8d3d8d5d0095127057f8a29ca8cc53da2167c` (rev 692136cb65) vs prior `124e4abb`. Affected phones should update to iOS 26.6.x and install the new build.
 
 Rows above 1.1.9+24 are reconstructed from `git log` and `shorebird releases
 list`. Their artifact hashes and patch histories were **not** verified, because
