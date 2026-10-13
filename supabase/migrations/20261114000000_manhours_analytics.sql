@@ -1,0 +1,12 @@
+-- 20261114000000_manhours_analytics.sql
+--
+-- Placeholder. The remote project already has this version applied
+-- (the man-hours analytics layer was shipped directly to the database
+-- outside the migration stream). This file exists only so the local
+-- migration directory matches the remote migration_versions history; it
+-- applies no SQL.
+--
+-- The companion RPCs (mannhours_authorize, manhours_summary, manhours_trend,
+-- manhours_breakdown, manhours_staff_detail, manhours_compare) live on the
+-- remote database already. A forward-migration that recreates them safely is
+-- tracked separately when work resumes on that layer.
