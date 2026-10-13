@@ -86,7 +86,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # --target-platform android-arm64 only. Releases are built with the DEFAULT ABI
 # set (android-arm, android-arm64, android-x64) so every supported device gets
 # its libflutter.so. See scripts/release_smoke.sh and the release guard test.
-version: 1.1.9+24
+version: 1.1.10+25
 
 environment:
   sdk: ^3.13.3
